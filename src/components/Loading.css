@@ -1,0 +1,25 @@
+/* Loading and error states */
+.loading, .error-message {
+    text-align: center;
+    padding: 3rem 1rem;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--surface-light);
+    border-top: 3px solid var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.loading p, .error-message p {
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+} 
