@@ -1,62 +1,43 @@
 import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import "./App.css";
 import Header from "./components/Header";
-import Controls from "./components/Controls";
-import StatsOverview from "./components/StatsOverview";
-import CryptoGrid from "./components/CryptoGrid";
-import Loading from "./components/Loading";
-import ErrorMessage from "./components/ErrorMessage";
-import { useCryptoData } from "./hooks/useCryptoData";
+import Sidebar from "./components/Sidebar";
+import Dashboard from "./pages/Dashboard";
+import Portfolio from "./pages/Portfolio";
+import Trading from "./pages/Trading";
+import Analytics from "./pages/Analytics";
+import News from "./pages/News";
+import Settings from "./pages/Settings";
 
 function App() {
-  const {
-    cryptoData,
-    filteredData,
-    globalStats,
-    loading,
-    error,
-    searchTerm,
-    setSearchTerm,
-    currentView,
-    setCurrentView,
-    connectionStatus,
-    retryConnection,
-  } = useCryptoData();
-
   return (
-    <div className="App">
-      <Header connectionStatus={connectionStatus} />
+    <Router>
+      <div className="App">
+        <Sidebar />
+        <Header />
 
-      <main className="main">
-        <div className="container">
-          <Controls
-            searchTerm={searchTerm}
-            setSearchTerm={setSearchTerm}
-            currentView={currentView}
-            setCurrentView={setCurrentView}
-          />
+        <main className="main-content">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/portfolio" element={<Portfolio />} />
+            <Route path="/trading" element={<Trading />} />
+            <Route path="/analytics" element={<Analytics />} />
+            <Route path="/news" element={<News />} />
+            <Route path="/settings" element={<Settings />} />
+          </Routes>
+        </main>
 
-          <StatsOverview stats={globalStats} />
-
-          {loading && <Loading />}
-
-          {error && <ErrorMessage onRetry={retryConnection} />}
-
-          {!loading && !error && (
-            <CryptoGrid cryptoData={filteredData} currentView={currentView} />
-          )}
-        </div>
-      </main>
-
-      <footer className="footer">
-        <div className="container">
-          <p>
-            &copy; 2024 Crypto Trading Dashboard. Real-time data powered by
-            WebSocket.
-          </p>
-        </div>
-      </footer>
-    </div>
+        <footer className="footer">
+          <div className="container">
+            <p>
+              &copy; 2024 Crypto Trading Dashboard. Real-time data powered by
+              WebSocket.
+            </p>
+          </div>
+        </footer>
+      </div>
+    </Router>
   );
 }
 
