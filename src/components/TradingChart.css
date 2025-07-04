@@ -1,0 +1,338 @@
+.trading-chart-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.chart-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding: 15px 20px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e1e5e9;
+}
+
+.toolbar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toolbar-section h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.indicator-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.indicator-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #555;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.indicator-toggle:hover {
+  background: rgba(30, 60, 114, 0.1);
+}
+
+.indicator-toggle input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.period-input {
+  width: 50px;
+  padding: 2px 6px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.drawing-tools,
+.chart-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tool-btn {
+  padding: 6px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  color: #555;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tool-btn:hover {
+  background: #f0f0f0;
+  border-color: #1e3c72;
+  color: #1e3c72;
+}
+
+.tool-btn.active {
+  background: #1e3c72;
+  border-color: #1e3c72;
+  color: #fff;
+}
+
+.chart-wrapper {
+  flex: 1;
+  position: relative;
+  min-height: 500px;
+}
+
+.chart-container {
+  width: 100%;
+  height: 100%;
+  min-height: 500px;
+}
+
+.chart-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: #f8f9fa;
+  border-top: 1px solid #e1e5e9;
+  font-size: 0.85rem;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.info-label {
+  font-weight: 600;
+  color: #333;
+}
+
+.info-value {
+  color: #666;
+  background: #fff;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #e1e5e9;
+}
+
+/* Dark theme support */
+.trading-chart-container.dark {
+  background: #1e1e1e;
+}
+
+.trading-chart-container.dark .chart-toolbar {
+  background: #2d2d2d;
+  border-bottom-color: #404040;
+}
+
+.trading-chart-container.dark .toolbar-section h4 {
+  color: #d1d4dc;
+}
+
+.trading-chart-container.dark .indicator-toggle {
+  color: #b0b3b8;
+}
+
+.trading-chart-container.dark .indicator-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.trading-chart-container.dark .tool-btn {
+  background: #2d2d2d;
+  border-color: #404040;
+  color: #b0b3b8;
+}
+
+.trading-chart-container.dark .tool-btn:hover {
+  background: #404040;
+  border-color: #1e3c72;
+  color: #fff;
+}
+
+.trading-chart-container.dark .chart-info {
+  background: #2d2d2d;
+  border-top-color: #404040;
+}
+
+.trading-chart-container.dark .info-label {
+  color: #d1d4dc;
+}
+
+.trading-chart-container.dark .info-value {
+  background: #404040;
+  border-color: #555;
+  color: #b0b3b8;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .chart-toolbar {
+    padding: 10px 15px;
+    gap: 15px;
+  }
+
+  .indicator-controls {
+    gap: 8px;
+  }
+
+  .indicator-toggle {
+    font-size: 0.8rem;
+    padding: 3px 6px;
+  }
+
+  .drawing-tools,
+  .chart-options {
+    gap: 6px;
+  }
+
+  .tool-btn {
+    padding: 5px 10px;
+    font-size: 0.8rem;
+  }
+
+  .chart-info {
+    padding: 10px 15px;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .info-item {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 480px) {
+  .chart-toolbar {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .indicator-controls {
+    justify-content: center;
+  }
+
+  .drawing-tools,
+  .chart-options {
+    justify-content: center;
+  }
+
+  .tool-btn {
+    flex: 1;
+    justify-content: center;
+    max-width: 120px;
+  }
+}
+
+/* Chart specific styles */
+.chart-container canvas {
+  border-radius: 0;
+}
+
+/* Loading state */
+.chart-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 500px;
+  background: #f8f9fa;
+  color: #666;
+  font-size: 1.1rem;
+}
+
+/* Error state */
+.chart-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 500px;
+  background: #fff5f5;
+  color: #e53e3e;
+  font-size: 1.1rem;
+  text-align: center;
+  padding: 20px;
+}
+
+/* Zoom controls */
+.zoom-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  z-index: 10;
+}
+
+.zoom-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  color: #555;
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.zoom-btn:hover {
+  background: #f0f0f0;
+  border-color: #1e3c72;
+  color: #1e3c72;
+}
+
+/* Tooltip styles */
+.chart-tooltip {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  pointer-events: none;
+  z-index: 1000;
+  max-width: 200px;
+}
+
+.chart-tooltip .tooltip-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.chart-tooltip .tooltip-value {
+  color: #ccc;
+} 

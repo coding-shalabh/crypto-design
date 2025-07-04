@@ -6,6 +6,7 @@ import Sidebar from "./components/Sidebar";
 import Dashboard from "./pages/Dashboard";
 import Portfolio from "./pages/Portfolio";
 import Trading from "./pages/Trading";
+import Charts from "./pages/Charts";
 import Analytics from "./pages/Analytics";
 import News from "./pages/News";
 import Settings from "./pages/Settings";
@@ -22,6 +23,7 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/portfolio" element={<Portfolio />} />
             <Route path="/trading" element={<Trading />} />
+            <Route path="/charts" element={<Charts />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/news" element={<News />} />
             <Route path="/settings" element={<Settings />} />

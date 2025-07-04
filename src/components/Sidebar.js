@@ -39,6 +39,12 @@ const Sidebar = () => {
       description: "Buy and sell crypto",
     },
     {
+      path: "/charts",
+      name: "Charts",
+      icon: "📊",
+      description: "Trading charts for any coin",
+    },
+    {
       path: "/analytics",
       name: "Analytics",
       icon: "📉",
