@@ -140,12 +140,14 @@ class FakeServerTester:
         
         trade_data = {
             'type': 'execute_trade',
-            'symbol': 'BTC',
-            'direction': 'BUY',
-            'amount': 0.01,
-            'price': 45000.0
+            'trade_data': {
+                'symbol': 'BTC',
+                'direction': 'BUY',
+                'amount': 0.01,
+                'price': 45000.0
+            }
         }
-        
+
         await self.send_message(trade_data)
         response = await self.receive_message()
         
