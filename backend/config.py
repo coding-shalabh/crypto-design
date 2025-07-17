@@ -80,3 +80,77 @@ class Config:
             config['trade_amount_usdt'] = float(os.getenv('BOT_TRADE_AMOUNT'))
         
         return config 
+    
+    # Add these optimized settings to your existing Config class in backend/config.py
+
+    # 🔧 FIXED: WebSocket Server Optimization Settings
+    WEBSOCKET_SETTINGS = {
+        'ping_interval': 20,        # Send ping every 20 seconds
+        'ping_timeout': 10,         # Wait 10 seconds for pong response
+        'close_timeout': 10,        # Wait 10 seconds for close handshake
+        'max_size': 2**20,          # 1MB max message size
+        'max_queue': 32,            # Max queue size for incoming messages
+        'compression': None,        # Disable compression for better performance
+        'max_connections': 50,      # Maximum concurrent connections
+        'connection_timeout': 10,   # Connection handshake timeout
+    }
+    
+    # 🔧 FIXED: Background Task Settings
+    TASK_SETTINGS = {
+        'market_data_interval': 30,     # Update market data every 30 seconds
+        'price_broadcast_interval': 5,  # Broadcast prices every 5 seconds
+        'connection_monitor_interval': 30,  # Monitor connections every 30 seconds
+        'health_check_interval': 60,    # Health check every minute
+        'heartbeat_interval': 30,       # Send heartbeat every 30 seconds
+        'max_missed_heartbeats': 3,     # Max missed heartbeats before disconnect
+    }
+    
+    # 🔧 FIXED: Rate Limiting Settings
+    RATE_LIMITS = {
+        'messages_per_second': 10,      # Max messages per second per client
+        'messages_per_minute': 600,     # Max messages per minute per client
+        'broadcast_throttle': 5,        # Min seconds between broadcasts
+        'api_call_throttle': 1,         # Min seconds between API calls
+    }
+    
+    # 🔧 FIXED: Memory Management Settings
+    MEMORY_SETTINGS = {
+        'max_trade_history': 100,       # Max trades in memory
+        'max_analysis_cache': 50,       # Max cached analyses
+        'max_log_entries': 1000,        # Max log entries in memory
+        'cleanup_interval': 300,        # Cleanup every 5 minutes
+    }
+    
+    # 🔧 FIXED: Error Recovery Settings
+    ERROR_RECOVERY = {
+        'max_reconnect_attempts': 10,   # Max reconnection attempts
+        'base_reconnect_delay': 1000,   # Base delay in milliseconds
+        'max_reconnect_delay': 30000,   # Max delay in milliseconds
+        'task_restart_delay': 5,        # Delay before restarting failed tasks
+        'error_threshold': 5,           # Max errors before circuit breaker
+    }
+    
+    @classmethod
+    def get_websocket_settings(cls) -> Dict:
+        """Get WebSocket server settings"""
+        return cls.WEBSOCKET_SETTINGS.copy()
+    
+    @classmethod
+    def get_task_settings(cls) -> Dict:
+        """Get background task settings"""
+        return cls.TASK_SETTINGS.copy()
+    
+    @classmethod
+    def get_rate_limits(cls) -> Dict:
+        """Get rate limiting settings"""
+        return cls.RATE_LIMITS.copy()
+    
+    @classmethod
+    def get_memory_settings(cls) -> Dict:
+        """Get memory management settings"""
+        return cls.MEMORY_SETTINGS.copy()
+    
+    @classmethod
+    def get_error_recovery_settings(cls) -> Dict:
+        """Get error recovery settings"""
+        return cls.ERROR_RECOVERY.copy()
