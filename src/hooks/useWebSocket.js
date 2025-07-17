@@ -278,7 +278,7 @@ const useWebSocket = (url = 'ws://localhost:8765') => {
   const executePaperTrade = useCallback((tradeData) => {
     sendMessage({
       type: 'execute_trade',
-      ...tradeData
+      trade_data: tradeData
     });
   }, [sendMessage]);
 
