@@ -43,10 +43,11 @@ class DatabaseManager:
             self.client = None
             self.db = None
             self.trades_collection = None
-    
+
     async def log_trade(self, trade_data: Dict) -> bool:
         """Log trade data to MongoDB"""
-        if not self.trades_collection:
+        #   FIXED: Check for None instead of bool evaluation
+        if self.trades_collection is None:
             logger.info(" MongoDB not available, skipping trade logging")
             return False
         
@@ -59,15 +60,22 @@ class DatabaseManager:
             if 'trade_id' not in trade_data:
                 trade_data['trade_id'] = f"trade_{int(datetime.now().timestamp())}_{trade_data.get('symbol', 'UNKNOWN')}"
             
+            #   FIXED: Create a copy to avoid modifying original data
+            trade_data_copy = trade_data.copy()
+            
             # Insert trade record
-            result = self.trades_collection.insert_one(trade_data)
-            logger.info(f" Trade logged to MongoDB with ID: {result.inserted_id}")
+            result = self.trades_collection.insert_one(trade_data_copy)
+            
+            #   FIXED: Convert ObjectId to string for logging
+            object_id_str = str(result.inserted_id)
+            logger.info(f" Trade logged to MongoDB with ID: {object_id_str}")
+            
             return True
             
         except Exception as e:
             logger.error(f" Error logging trade to MongoDB: {e}")
             return False
-    
+
     async def log_closed_trade(self, symbol: str, position: Dict, close_price: float, 
                               close_value: float, profit_loss: float, entry_details: Dict = None) -> bool:
         """Log comprehensive trade details when a position is closed"""
@@ -107,7 +115,7 @@ class DatabaseManager:
     
     async def get_recent_trades(self, symbol: str = None, limit: int = 100) -> list:
         """Get recent trades from database"""
-        if not self.trades_collection:
+        if self.trades_collection is None:
             return []
         
         try:
@@ -116,7 +124,14 @@ class DatabaseManager:
                 query['symbol'] = symbol
             
             cursor = self.trades_collection.find(query).sort('timestamp', -1).limit(limit)
-            return list(cursor)
+            trades = list(cursor)
+            
+            # Convert ObjectId to string for JSON serialization
+            for trade in trades:
+                if '_id' in trade:
+                    trade['_id'] = str(trade['_id'])
+            
+            return trades
             
         except Exception as e:
             logger.error(f" Error fetching recent trades: {e}")

@@ -23,7 +23,7 @@ const useWebSocket = (url = 'ws://localhost:8765') => {
   const isConnectingRef = useRef(false);
   const isMountedRef = useRef(true); // Track if component is mounted
 
-  // ✅ Fix: Create stable handleMessage function with useCallback and minimal dependencies
+  //   Fix: Create stable handleMessage function with useCallback and minimal dependencies
   const handleMessage = useCallback((message) => {
     console.log('🔍 useWebSocket: handleMessage called with:', message);
     const { type, data: messageData } = message;
@@ -31,7 +31,7 @@ const useWebSocket = (url = 'ws://localhost:8765') => {
     // Update last heartbeat on any message
     lastHeartbeatRef.current = Date.now();
 
-    // ✅ Use functional state updates to avoid dependencies
+    //   Use functional state updates to avoid dependencies
     setData(prevData => {
       let newData = { ...prevData };
       
@@ -107,9 +107,9 @@ const useWebSocket = (url = 'ws://localhost:8765') => {
       
       return newData;
     });
-  }, []); // ✅ No dependencies needed thanks to functional updates
+  }, []); //   No dependencies needed thanks to functional updates
 
-  // ✅ Fix: Create stable heartbeat functions
+  //   Fix: Create stable heartbeat functions
   const startHeartbeat = useCallback(() => {
     if (heartbeatIntervalRef.current) {
       clearInterval(heartbeatIntervalRef.current);
@@ -128,7 +128,7 @@ const useWebSocket = (url = 'ws://localhost:8765') => {
         }
       }
     }, 10000);
-  }, []); // ✅ No dependencies needed
+  }, []); //   No dependencies needed
 
   const stopHeartbeat = useCallback(() => {
     if (heartbeatIntervalRef.current) {
@@ -137,11 +137,11 @@ const useWebSocket = (url = 'ws://localhost:8765') => {
     }
   }, []);
 
-  // ✅ Fix: Create stable connect function
+  //   Fix: Create stable connect function
   const connect = useCallback(() => {
     console.log('🔍 useWebSocket: connect called');
     
-    // ✅ Better connection state checking
+    //   Better connection state checking
     if (!isMountedRef.current) {
       console.log('🔍 useWebSocket: Component unmounted, not connecting');
       return;
@@ -167,7 +167,7 @@ const useWebSocket = (url = 'ws://localhost:8765') => {
     try {
       console.log('🔍 useWebSocket: Creating new WebSocket connection to:', url);
       
-      // ✅ Close existing connection if any
+      //   Close existing connection if any
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
@@ -187,7 +187,7 @@ const useWebSocket = (url = 'ws://localhost:8765') => {
 
         startHeartbeat();
 
-        // ✅ Load initial data with delay
+        //   Load initial data with delay
         setTimeout(() => {
           if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && isMountedRef.current) {
             console.log('🔍 useWebSocket: Loading initial data...');
@@ -218,7 +218,7 @@ const useWebSocket = (url = 'ws://localhost:8765') => {
         isConnectingRef.current = false;
         wsRef.current = null;
 
-        // ✅ Only reconnect if it wasn't a normal closure and component is still mounted
+        //   Only reconnect if it wasn't a normal closure and component is still mounted
         if (event.code !== 1000 && reconnectAttempts.current < maxReconnectAttempts && isMountedRef.current) {
           reconnectAttempts.current += 1;
           const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
@@ -243,7 +243,7 @@ const useWebSocket = (url = 'ws://localhost:8765') => {
       setError('Failed to create WebSocket connection');
       isConnectingRef.current = false;
     }
-  }, [url, handleMessage, startHeartbeat, stopHeartbeat]); // ✅ Stable dependencies
+  }, [url, handleMessage, startHeartbeat, stopHeartbeat]); //   Stable dependencies
 
   const disconnect = useCallback(() => {
     console.log('🔍 useWebSocket: disconnect called');
@@ -315,7 +315,7 @@ const useWebSocket = (url = 'ws://localhost:8765') => {
     sendMessage({ type: 'update_bot_config', config: newConfig });
   }, [sendMessage]);
 
-  // ✅ Fix: Connect only once on mount, with proper cleanup
+  //   Fix: Connect only once on mount, with proper cleanup
   useEffect(() => {
     console.log('🔍 useWebSocket: Component mounted, connecting...');
     isMountedRef.current = true;
@@ -326,9 +326,9 @@ const useWebSocket = (url = 'ws://localhost:8765') => {
       isMountedRef.current = false;
       disconnect();
     };
-  }, []); // ✅ Empty dependency array - connect only once!
+  }, []); //   Empty dependency array - connect only once!
 
-  // ✅ Fix: Separate effect for URL changes
+  //   Fix: Separate effect for URL changes
   useEffect(() => {
     if (isMountedRef.current && wsRef.current) {
       console.log('🔍 useWebSocket: URL changed, reconnecting...');

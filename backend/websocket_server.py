@@ -7,7 +7,7 @@ import json
 import logging
 import time
 from typing import Dict, Set
-from datetime import datetime
+
 
 from config import Config
 from database import DatabaseManager
@@ -16,6 +16,21 @@ from news_analysis import NewsAnalysisManager
 from ai_analysis import AIAnalysisManager
 from trading_bot import TradingBot
 from trade_execution import TradeExecutionManager
+from bson import ObjectId
+from datetime import datetime
+
+
+def safe_json_serialize(obj):
+    """Safely serialize objects to JSON, handling ObjectId and other types"""
+    def json_serializer(obj):
+        if isinstance(obj, ObjectId):
+            return str(obj)
+        elif isinstance(obj, datetime):
+            return obj.isoformat()
+        else:
+            return str(obj)
+    
+    return json.dumps(obj, default=json_serializer)
 
 # Configure logging with reduced output - only essential events
 logging.basicConfig(
@@ -111,7 +126,7 @@ class TradingServer:
         client_id = id(websocket)
         
         # Check connection limit
-        if len(self.clients) >= 10:  # Limit to 10 simultaneous connections
+        if len(self.clients) >= 50:  # Increased limit to 50 simultaneous connections
             logger.warning(f"Connection limit reached, rejecting client {client_id}")
             await websocket.close(1013, "Too many connections")
             return
@@ -135,7 +150,7 @@ class TradingServer:
                 except json.JSONDecodeError:
                     logger.error(f"Client {client_id} sent invalid JSON")
                     try:
-                        await websocket.send(json.dumps({
+                        await websocket.send(safe_json_serialize({
                             'type': 'error',
                             'data': {'message': 'Invalid JSON format'}
                         }))
@@ -144,7 +159,7 @@ class TradingServer:
                 except Exception as e:
                     logger.error(f"Error handling message from client {client_id}: {e}")
                     try:
-                        await websocket.send(json.dumps({
+                        await websocket.send(safe_json_serialize({
                             'type': 'error',
                             'data': {'message': str(e)}
                         }))
@@ -184,11 +199,11 @@ class TradingServer:
                     'ai_insights': None
                 }
             }
-            await websocket.send(json.dumps(initial_data))
+            await websocket.send(safe_json_serialize(initial_data))
             
             # Also send individual responses for compatibility
             # Send positions
-            await websocket.send(json.dumps({
+            await websocket.send(safe_json_serialize({
                 'type': 'positions_response',
                 'data': {
                     'balance': balance,
@@ -197,7 +212,7 @@ class TradingServer:
             }))
             
             # Send trade history
-            await websocket.send(json.dumps({
+            await websocket.send(safe_json_serialize({
                 'type': 'trade_history_response',
                 'data': {
                     'trades': recent_trades
@@ -205,14 +220,14 @@ class TradingServer:
             }))
             
             # Send crypto data
-            await websocket.send(json.dumps({
+            await websocket.send(safe_json_serialize({
                 'type': 'crypto_data_response',
                 'data': crypto_data
             }))
             
             # Send bot status
             bot_status = await self.trading_bot.get_bot_status()
-            await websocket.send(json.dumps({
+            await websocket.send(safe_json_serialize({
                 'type': 'bot_status_response',
                 'data': bot_status
             }))
@@ -228,7 +243,7 @@ class TradingServer:
             if message_type == 'get_positions':
                 positions = self.trade_execution.get_positions()
                 balance = self.trade_execution.get_balance()
-                await websocket.send(json.dumps({
+                await websocket.send(safe_json_serialize({
                     'type': 'positions_response',
                     'data': {
                         'balance': balance,
@@ -244,7 +259,7 @@ class TradingServer:
                 if symbol:
                     trades = [t for t in trades if t.get('symbol') == symbol]
                 
-                await websocket.send(json.dumps({
+                await websocket.send(safe_json_serialize({
                     'type': 'trade_history_response',
                     'data': {
                         'trades': trades
@@ -259,7 +274,7 @@ class TradingServer:
                 else:
                     response_data = self.market_data.get_all_crypto_data()
                 
-                await websocket.send(json.dumps({
+                await websocket.send(safe_json_serialize({
                     'type': 'crypto_data_response',
                     'data': response_data
                 }))
@@ -271,7 +286,7 @@ class TradingServer:
                 if result['success']:
                     logger.info(f"Trade executed successfully")
                     # Send trade executed response (matches frontend expectations)
-                    await websocket.send(json.dumps({
+                    await websocket.send(safe_json_serialize({
                         'type': 'trade_executed',
                         'data': {
                             'trade': result['trade_data'],
@@ -281,7 +296,7 @@ class TradingServer:
                     }))
                     
                     # Also send paper_trade_response for frontend compatibility
-                    await websocket.send(json.dumps({
+                    await websocket.send(safe_json_serialize({
                         'type': 'paper_trade_response',
                         'data': result
                     }))
@@ -293,19 +308,20 @@ class TradingServer:
                     })
                 else:
                     logger.error(f"Trade execution failed: {result['message']}")
-                    await websocket.send(json.dumps({
+                    await websocket.send(safe_json_serialize({
                         'type': 'error',
                         'data': {'message': result['message']}
                     }))
                 
             elif message_type == 'paper_trade':
                 trade_data = data.get('trade_data', {})
+                logger.info(f"Received paper trade request: {trade_data}")
                 result = await self.trade_execution.execute_paper_trade(trade_data)
                 
                 if result['success']:
                     logger.info(f"Paper trade executed successfully")
                     # Send trade executed response (matches frontend expectations)
-                    await websocket.send(json.dumps({
+                    await websocket.send(safe_json_serialize({
                         'type': 'trade_executed',
                         'data': {
                             'trade': result['trade_data'],
@@ -315,7 +331,7 @@ class TradingServer:
                     }))
                     
                     # Also send paper_trade_response for frontend compatibility
-                    await websocket.send(json.dumps({
+                    await websocket.send(safe_json_serialize({
                         'type': 'paper_trade_response',
                         'data': result
                     }))
@@ -327,7 +343,8 @@ class TradingServer:
                     })
                 else:
                     logger.error(f"Paper trade execution failed: {result['message']}")
-                    await websocket.send(json.dumps({
+                    logger.error(f"Trade data received: {trade_data}")
+                    await websocket.send(safe_json_serialize({
                         'type': 'error',
                         'data': {'message': result['message']}
                     }))
@@ -339,7 +356,7 @@ class TradingServer:
                 if result['success']:
                     logger.info(f"Position closed successfully")
                     # Send position closed response (matches frontend expectations)
-                    await websocket.send(json.dumps({
+                    await websocket.send(safe_json_serialize({
                         'type': 'position_closed',
                         'data': {
                             'trade': result['trade_data'],
@@ -356,7 +373,7 @@ class TradingServer:
                     })
                 else:
                     logger.error(f"Position close failed: {result['message']}")
-                    await websocket.send(json.dumps({
+                    await websocket.send(safe_json_serialize({
                         'type': 'error',
                         'data': {'message': result['message']}
                     }))
@@ -365,7 +382,7 @@ class TradingServer:
                 config = data.get('config', {})
                 result = await self.trading_bot.start_bot(config)
                 
-                await websocket.send(json.dumps({
+                await websocket.send(safe_json_serialize({
                     'type': 'start_bot_response',
                     'data': result
                 }))
@@ -391,7 +408,7 @@ class TradingServer:
             elif message_type == 'stop_bot':
                 result = await self.trading_bot.stop_bot()
                 
-                await websocket.send(json.dumps({
+                await websocket.send(safe_json_serialize({
                     'type': 'stop_bot_response',
                     'data': result
                 }))
@@ -409,7 +426,7 @@ class TradingServer:
             elif message_type == 'get_bot_status':
                 bot_status = await self.trading_bot.get_bot_status()
                 
-                await websocket.send(json.dumps({
+                await websocket.send(safe_json_serialize({
                     'type': 'bot_status_response',
                     'data': bot_status
                 }))
@@ -418,7 +435,7 @@ class TradingServer:
                 new_config = data.get('config', {})
                 result = await self.trading_bot.update_bot_config(new_config)
                 
-                await websocket.send(json.dumps({
+                await websocket.send(safe_json_serialize({
                     'type': 'update_bot_config_response',
                     'data': result
                 }))
@@ -431,7 +448,7 @@ class TradingServer:
             elif message_type == 'start_analysis':
                 result = await self.start_analysis()
                 
-                await websocket.send(json.dumps({
+                await websocket.send(safe_json_serialize({
                     'type': 'start_analysis_response',
                     'data': result
                 }))
@@ -439,7 +456,7 @@ class TradingServer:
             elif message_type == 'stop_analysis':
                 result = await self.stop_analysis()
                 
-                await websocket.send(json.dumps({
+                await websocket.send(safe_json_serialize({
                     'type': 'stop_analysis_response',
                     'data': result
                 }))
@@ -447,14 +464,14 @@ class TradingServer:
             elif message_type == 'get_analysis_status':
                 status = await self.get_analysis_status()
                 
-                await websocket.send(json.dumps({
+                await websocket.send(safe_json_serialize({
                     'type': 'analysis_status_response',
                     'data': status
                 }))
                 
             else:
                 logger.warning(f"Unknown message type: {message_type}")
-                await websocket.send(json.dumps({
+                await websocket.send(safe_json_serialize({
                     'type': 'error',
                     'data': {'message': f'Unknown message type: {message_type}'}
                 }))
@@ -462,7 +479,7 @@ class TradingServer:
         except Exception as e:
             logger.error(f"Error handling message: {e}")
             try:
-                await websocket.send(json.dumps({
+                await websocket.send(safe_json_serialize({
                     'type': 'error',
                     'data': {'message': str(e)}
                 }))
@@ -728,9 +745,10 @@ class TradingServer:
                 positions_updated = False
                 
                 for symbol, price in prices.items():
-                    # Update position current price if position exists
+                    # price is a dict, get the float value
+                    price_value = price.get('price', 0) if isinstance(price, dict) else price
                     if symbol in positions:
-                        self.trade_execution.update_position_current_price(symbol, price)
+                        self.trade_execution.update_position_current_price(symbol, price_value)
                         positions_updated = True
                     
                     crypto_data = self.market_data.get_all_crypto_data()
@@ -773,18 +791,21 @@ class TradingServer:
         }
         
         try:
-            # Create a copy of clients set to avoid modification during iteration
-            clients_copy = self.clients.copy()
-            disconnected_clients = set()
+            #   FIXED: Create a list copy to avoid modification during iteration
+            clients_copy = list(self.clients)
+            disconnected_clients = []
+            
+            #   FIXED: Use safe JSON serialization
+            serialized_message = safe_json_serialize(message)
             
             for client in clients_copy:
                 try:
-                    await client.send(json.dumps(message))
+                    await client.send(serialized_message)
                 except websockets.exceptions.ConnectionClosed:
-                    disconnected_clients.add(client)
+                    disconnected_clients.append(client)
                 except Exception as e:
                     logger.error(f"Error sending to client: {e}")
-                    disconnected_clients.add(client)
+                    disconnected_clients.append(client)
             
             # Remove disconnected clients from the original set
             for client in disconnected_clients:
@@ -795,7 +816,7 @@ class TradingServer:
             
         except Exception as e:
             logger.error(f"Error broadcasting message: {e}")
-    
+
     async def broadcast_analysis_status(self, status: str, message: str):
         """Broadcast analysis status to all clients"""
         try:

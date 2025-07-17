@@ -24,13 +24,26 @@ class TradeExecutionManager:
         self.trade_entries = {}  # symbol -> entry details for logging
         
     async def execute_paper_trade(self, trade_data: Dict) -> Dict:
-        """Execute a paper trade"""
+        """Execute a paper trade with proper direction mapping"""
         try:
             symbol = trade_data.get('symbol')
-            direction = trade_data.get('direction', 'LONG')
+            direction_raw = trade_data.get('direction', 'buy')  # Get raw direction from frontend
             amount = trade_data.get('amount', 0)
             price = trade_data.get('price', 0)
             trade_id = trade_data.get('trade_id', f"trade_{int(time.time())}_{symbol}")
+            
+            #   FIXED: Normalize direction mapping
+            if direction_raw.lower() in ['buy', 'long']:
+                trade_direction = 'BUY'
+                position_direction = 'long'
+            elif direction_raw.lower() in ['sell', 'short']:
+                trade_direction = 'SELL'
+                position_direction = 'short'
+            else:
+                logger.error(f"Unknown direction: {direction_raw}")
+                return {'success': False, 'message': f'Unknown direction: {direction_raw}'}
+            
+            logger.info(f"Processing trade: {symbol} {direction_raw} -> {trade_direction}/{position_direction}")
             
             if not all([symbol, amount, price]):
                 return {'success': False, 'message': 'Missing required trade data'}
@@ -38,9 +51,15 @@ class TradeExecutionManager:
             # Calculate trade value
             trade_value = amount * price
             
-            # Check if we have enough balance
-            if trade_value > self.paper_balance:
-                return {'success': False, 'message': 'Insufficient balance'}
+            #   FIXED: Proper balance validation
+            if trade_direction == 'BUY':
+                if trade_value > self.paper_balance:
+                    return {'success': False, 'message': f'Insufficient balance: ${self.paper_balance:.2f} available, ${trade_value:.2f} needed'}
+            elif trade_direction == 'SELL':
+                current_position = self.positions.get(symbol)
+                if not current_position or current_position['amount'] < amount:
+                    available = current_position['amount'] if current_position else 0
+                    return {'success': False, 'message': f'Insufficient {symbol} position: {available:.6f} available, {amount:.6f} needed'}
             
             # Check for existing position
             existing_position = self.positions.get(symbol)
@@ -50,17 +69,20 @@ class TradeExecutionManager:
                 await self.close_position(symbol)
             
             # Execute new trade
-            self.paper_balance -= trade_value
+            if trade_direction == 'BUY':
+                self.paper_balance -= trade_value
+            else:
+                self.paper_balance += trade_value
             
             # Create position (matches frontend expectations)
             position = {
                 'symbol': symbol,
                 'amount': amount,
-                'avg_price': price,  # Frontend expects avg_price, not entry_price
+                'avg_price': price,
                 'entry_price': price,
                 'current_price': price,
                 'unrealized_pnl': 0.0,
-                'direction': 'long' if direction == 'LONG' else 'short'
+                'direction': position_direction  #   FIXED: Use normalized direction
             }
             
             self.positions[symbol] = position
@@ -74,11 +96,11 @@ class TradeExecutionManager:
                 'trade_data': trade_data
             }
             
-            # Add to recent trades (matches frontend expectations)
+            #   FIXED: Create proper trade record
             trade_record = {
                 'trade_id': trade_id,
                 'symbol': symbol,
-                'direction': 'BUY' if direction == 'LONG' else 'SELL',
+                'direction': trade_direction,
                 'amount': amount,
                 'price': price,
                 'value': trade_value,
@@ -97,19 +119,19 @@ class TradeExecutionManager:
             # Log to database
             await self.db.log_trade(trade_record)
             
-            logger.info(f" Paper trade executed: {symbol} {direction} {amount} @ ${price:.2f}")
+            logger.info(f"Paper trade executed: {symbol} {trade_direction} {amount} @ ${price:.2f}")
             
             return {
                 'success': True,
-                'message': f'Paper trade executed: {symbol} {direction}',
+                'message': f'Paper trade executed: {symbol} {trade_direction}',
                 'trade_data': trade_record,
                 'new_balance': self.paper_balance
             }
             
         except Exception as e:
-            logger.error(f" Error executing paper trade: {e}")
+            logger.error(f"❌ Error executing paper trade: {e}")
             return {'success': False, 'message': f'Error executing trade: {e}'}
-    
+
     async def close_position(self, symbol: str, close_price: Optional[float] = None) -> Dict:
         """Close a position"""
         try:
@@ -214,7 +236,7 @@ class TradeExecutionManager:
         """Add a pending trade for manual approval"""
         try:
             self.pending_trades[symbol] = trade_data
-            logger.info(f"⏳ Pending trade added for {symbol}")
+            logger.info(f"Pending trade added for {symbol}")
             return {'success': True, 'message': f'Pending trade added for {symbol}'}
             
         except Exception as e:

@@ -991,7 +991,7 @@ const TradingPanel = ({
       {/* Last Trade Success */}
       {lastTrade && (
         <div className="trade-success">
-          <div className="success-icon">✅</div>
+          <div className="success-icon"> </div>
           <div className="success-message">
             Successfully {lastTrade.direction === 'buy' ? 'bought' : 'sold'} {lastTrade.amount} USDT of {lastTrade.symbol} at ${lastTrade.price}
           </div>

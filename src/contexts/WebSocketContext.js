@@ -4,14 +4,14 @@ import useWebSocket from '../hooks/useWebSocket';
 // Create WebSocket context
 const WebSocketContext = createContext();
 
-// ✅ Add singleton pattern to prevent multiple providers
+//   Add singleton pattern to prevent multiple providers
 let providerInstance = null;
 
 // WebSocket provider component
 export const WebSocketProvider = ({ children }) => {
   console.log('🔍 WebSocketContext: Provider initialized');
   
-  // ✅ Prevent multiple providers
+  //   Prevent multiple providers
   const instanceRef = useRef(null);
   
   useEffect(() => {
