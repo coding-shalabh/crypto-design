@@ -93,13 +93,13 @@
 
 .tool-btn:hover {
   background: #f0f0f0;
-  border-color: #1e3c72;
-  color: #1e3c72;
+  border-color: #ff8000;
+  color: #ff8000;
 }
 
 .tool-btn.active {
-  background: #1e3c72;
-  border-color: #1e3c72;
+  background: #ff8000;
+  border-color: #ff8000;
   color: #fff;
 }
 
@@ -133,15 +133,13 @@
 
 .info-label {
   font-weight: 600;
-  color: #333;
+  color: #888888;
 }
 
 .info-value {
-  color: #666;
-  background: #fff;
+  color: #ffffff;
   padding: 2px 8px;
   border-radius: 4px;
-  border: 1px solid #e1e5e9;
 }
 
 /* Dark theme support */
@@ -174,7 +172,7 @@
 
 .trading-chart-container.dark .tool-btn:hover {
   background: #404040;
-  border-color: #1e3c72;
+  border-color: #ff8000;
   color: #fff;
 }
 
@@ -311,8 +309,8 @@
 
 .zoom-btn:hover {
   background: #f0f0f0;
-  border-color: #1e3c72;
-  color: #1e3c72;
+  border-color: #ff8000;
+  color: #ff8000;
 }
 
 /* Tooltip styles */

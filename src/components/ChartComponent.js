@@ -184,7 +184,7 @@ const ChartComponent = ({
     {
       label: "Price",
       data: prices,
-      borderColor: "#1e3c72",
+      borderColor: "#ff8000",
       backgroundColor: "rgba(30, 60, 114, 0.1)",
       borderWidth: 2,
       fill: false,
@@ -273,7 +273,7 @@ const ChartComponent = ({
         label: "Volume",
         data: volumes,
         backgroundColor: "rgba(30, 60, 114, 0.6)",
-        borderColor: "#1e3c72",
+        borderColor: "#ff8000",
         borderWidth: 1,
       },
     ],

@@ -20,7 +20,7 @@ const Charts = () => {
     { id: "dogecoin", name: "Dogecoin", symbol: "DOGE" },
   ];
 
-  const timeframes = ["1H", "4H", "1D", "1W", "1M", "3M", "1Y"];
+  const timeframes = ["1M", "5M", "15M", "1H", "4H", "1D", "1W", "3M", "1Y"];
   const chartTypes = ["candlestick", "line", "area", "bar"];
 
   const handleCoinChange = (e) => {

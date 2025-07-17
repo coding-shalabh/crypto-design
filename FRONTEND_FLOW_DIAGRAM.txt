@@ -1,0 +1,616 @@
+# FRONTEND FLOW DIAGRAM - CRYPTO TRADING DASHBOARD
+# ================================================
+
+## 1. APPLICATION STARTUP FLOW
+```
+index.js (Entry Point)
+    ↓
+ReactDOM.render(<App />, document.getElementById('root'))
+    ↓
+App.js (Main Component)
+    ├── BrowserRouter setup
+    ├── Sidebar component
+    ├── Header component
+    ├── Main content area
+    └── Footer component
+    ↓
+Route Configuration:
+    ├── "/" → Dashboard component
+    ├── "/portfolio" → Portfolio component
+    ├── "/trading" → Trading component
+    ├── "/charts" → Charts component
+    ├── "/analytics" → Analytics component
+    ├── "/news" → News component
+    └── "/settings" → Settings component
+```
+
+## 2. WEBSOCKET CONNECTION FLOW
+```
+useWebSocket Hook (src/hooks/useWebSocket.js)
+    ↓
+Initialization:
+    ├── isConnected = false
+    ├── error = null
+    ├── data = { paper_balance: 0, positions: {}, ... }
+    ├── wsRef = useRef(null)
+    ├── reconnectTimeoutRef = useRef(null)
+    └── reconnectAttempts = useRef(0)
+    ↓
+connect() function
+    ↓
+new WebSocket('ws://localhost:8765')
+    ↓
+WebSocket Event Handlers:
+    ├── onopen → setIsConnected(true), loadInitialData()
+    ├── onmessage → handleMessage(event.data)
+    ├── onclose → setIsConnected(false), attemptReconnect()
+    └── onerror → setError('WebSocket connection error')
+```
+
+## 3. INITIAL DATA LOADING FLOW
+```
+WebSocket onopen event
+    ↓
+setTimeout(() => loadInitialData(), 1000)
+    ↓
+Initial Data Requests:
+    ├── sendMessage({ type: 'get_positions' })
+    ├── sendMessage({ type: 'get_trade_history', limit: 50 })
+    └── sendMessage({ type: 'get_crypto_data' })
+    ↓
+Backend responds with:
+    ├── positions_response
+    ├── trade_history_response
+    └── crypto_data_response
+    ↓
+handleMessage() processes responses
+    ↓
+setData() updates component state
+```
+
+## 4. MESSAGE HANDLING FLOW
+```
+WebSocket onmessage event
+    ↓
+JSON.parse(event.data)
+    ↓
+handleMessage(message)
+    ↓
+const { type, data: messageData } = message
+    ↓
+SWITCH(type):
+    ├── 'initial_data' → setData(prevData => ({ ...prevData, ...messageData }))
+    ├── 'price_update' → Update price_cache in state
+    ├── 'crypto_data_response' → Update crypto_data in state
+    ├── 'trade_executed' → Update balance, positions, recent_trades
+    ├── 'position_closed' → Update balance, positions, recent_trades
+    ├── 'ai_insights' → Update ai_insights in state
+    ├── 'bot_trade_executed' → Call window.handleBotResponse(message)
+    ├── 'bot_trade_closed' → Call window.handleBotResponse(message)
+    ├── 'trade_history_response' → Update recent_trades in state
+    ├── 'positions_response' → Update balance and positions in state
+    ├── 'position_update' → Update balance and positions in state
+    ├── 'error' → setError(messageData.message)
+    └── default → console.log('Unknown message type:', type)
+```
+
+## 5. COMPONENT HIERARCHY
+```
+App.js
+├── Sidebar.js
+│   ├── Navigation links
+│   └── Connection status
+├── Header.js
+│   ├── Balance display
+│   └── Connection indicator
+├── Main Content (Routes)
+│   ├── Dashboard.js
+│   │   ├── PortfolioSummary.js
+│   │   ├── RecentTrades.js
+│   │   ├── PriceChart.js
+│   │   └── AIInsights.js
+│   ├── Portfolio.js
+│   │   ├── PositionsList.js
+│   │   ├── TradeHistory.js
+│   │   └── PerformanceChart.js
+│   ├── Trading.js
+│   │   ├── TradingViewChart.js
+│   │   ├── TradingPanel.js
+│   │   ├── PositionsSidebar.js
+│   │   ├── TradingBot.js
+│   │   └── AIAnalysis.js
+│   ├── Charts.js
+│   │   ├── ChartSelector.js
+│   │   └── TechnicalIndicators.js
+│   ├── Analytics.js
+│   │   ├── PerformanceMetrics.js
+│   │   ├── RiskAnalysis.js
+│   │   └── TradingStats.js
+│   ├── News.js
+│   │   ├── NewsFeed.js
+│   │   └── SentimentAnalysis.js
+│   └── Settings.js
+│       ├── BotConfiguration.js
+│       ├── RiskManagement.js
+│       └── APISettings.js
+└── Footer.js
+```
+
+## 6. TRADING PAGE FLOW
+```
+Trading.js (Main Trading Page)
+    ↓
+useWebSocket() hook
+    ├── isConnected
+    ├── data (positions, balance, trades)
+    ├── executePaperTrade()
+    ├── startBot()
+    ├── stopBot()
+    ├── getBotStatus()
+    └── updateBotConfig()
+    ↓
+useCryptoDataBackend() hook
+    ├── cryptoData (from WebSocket)
+    ├── filteredData
+    └── globalStats
+    ↓
+Component State:
+    ├── selectedSymbol = "BTCUSDT"
+    ├── currentPrice = null
+    ├── priceChange = 0
+    ├── currentTimeframe = '1'
+    ├── activeTab = 'chart'
+    └── showAIChat = false
+    ↓
+Child Components:
+    ├── TradingViewChart.js (Chart display)
+    ├── TradingPanel.js (Trade execution)
+    ├── PositionsSidebar.js (Open positions)
+    ├── TradingBot.js (Bot controls)
+    └── AIAnalysis.js (AI insights)
+```
+
+## 7. TRADE EXECUTION FLOW
+```
+TradingPanel.js
+    ↓
+User inputs trade parameters:
+    ├── symbol (from selectedSymbol)
+    ├── direction (BUY/SELL)
+    ├── amount
+    └── price (current market price)
+    ↓
+executePaperTrade(tradeData)
+    ↓
+useWebSocket.sendMessage()
+    ↓
+WebSocket sends to backend:
+    {
+      type: 'execute_trade',
+      symbol: 'BTCUSDT',
+      direction: 'BUY',
+      amount: 0.1,
+      price: 45000.0
+    }
+    ↓
+Backend processes trade
+    ↓
+Backend sends response:
+    {
+      type: 'trade_executed',
+      data: {
+        trade: { ... },
+        new_balance: 95500.0,
+        positions: { ... }
+      }
+    }
+    ↓
+Frontend handleMessage() processes response
+    ↓
+setData() updates state
+    ↓
+UI components re-render with new data
+```
+
+## 8. BOT CONTROL FLOW
+```
+TradingBot.js
+    ↓
+Bot Configuration State:
+    ├── max_trades_per_day: 10
+    ├── trade_amount_usdt: 50
+    ├── profit_target_usd: 2
+    ├── stop_loss_usd: 1
+    ├── trailing_enabled: true
+    ├── ai_confidence_threshold: 0.75
+    └── allowed_pairs: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']
+    ↓
+Bot Status State:
+    ├── enabled: false
+    ├── start_time: null
+    ├── active_trades: 0
+    ├── trades_today: 0
+    ├── total_profit: 0
+    ├── total_trades: 0
+    ├── winning_trades: 0
+    └── win_rate: 0
+    ↓
+User Actions:
+    ├── Start Bot → startBot(botConfig)
+    ├── Stop Bot → stopBot()
+    ├── Update Config → updateBotConfig(newConfig)
+    └── Get Status → getBotStatus()
+    ↓
+WebSocket Messages:
+    ├── 'start_bot' → Backend starts bot
+    ├── 'stop_bot' → Backend stops bot
+    ├── 'update_bot_config' → Backend updates config
+    └── 'get_bot_status' → Backend returns status
+    ↓
+Response Handling:
+    ├── 'start_bot_response' → Update bot status
+    ├── 'stop_bot_response' → Update bot status
+    ├── 'bot_config_update_result' → Update config
+    └── 'bot_status_response' → Update status display
+```
+
+## 9. REAL-TIME DATA UPDATES FLOW
+```
+Backend continuously sends updates
+    ↓
+WebSocket receives messages:
+    ├── 'price_update' → Update crypto prices
+    ├── 'position_update' → Update open positions
+    ├── 'balance_update' → Update account balance
+    ├── 'ai_insights' → Update AI analysis
+    └── 'bot_trade_executed' → Update bot trades
+    ↓
+handleMessage() processes each message type
+    ↓
+setData() updates component state
+    ↓
+React re-renders affected components
+    ↓
+UI updates in real-time:
+    ├── Price displays update
+    ├── Position P&L updates
+    ├── Balance updates
+    ├── Trade history updates
+    └── Bot status updates
+```
+
+## 10. CRYPTO DATA FLOW
+```
+useCryptoDataBackend() hook
+    ↓
+Extract data from WebSocket:
+    const cryptoData = useMemo(() => {
+        return new Map(Object.entries(wsData.crypto_data || {}));
+    }, [wsData.crypto_data]);
+    ↓
+Filter and sort data:
+    const filteredData = useMemo(() => {
+        return Array.from(cryptoData.values())
+            .filter(crypto => 
+                crypto.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                crypto.symbol.toLowerCase().includes(searchTerm.toLowerCase())
+            )
+            .sort((a, b) => a.market_cap_rank - b.market_cap_rank);
+    }, [cryptoData, searchTerm]);
+    ↓
+Calculate global stats:
+    const globalStats = useMemo(() => {
+        const totalMarketCap = Array.from(cryptoData.values())
+            .reduce((sum, crypto) => sum + crypto.market_cap, 0);
+        // ... other calculations
+    }, [cryptoData]);
+    ↓
+Display in components:
+    ├── CryptoGrid.js (Grid view)
+    ├── CryptoList.js (List view)
+    └── CryptoCard.js (Individual crypto)
+```
+
+## 11. ERROR HANDLING FLOW
+```
+WebSocket connection errors
+    ↓
+onerror event
+    ↓
+setError('WebSocket connection error')
+    ↓
+UI displays error message
+    ↓
+Reconnection logic:
+    ├── onclose event
+    ├── Check if normal closure (code !== 1000)
+    ├── Increment reconnectAttempts
+    ├── Calculate delay (exponential backoff)
+    ├── setTimeout(() => connect(), delay)
+    └── Max attempts reached → Show error
+    ↓
+User can manually retry:
+    ├── retryConnection() function
+    ├── Reset reconnectAttempts
+    ├── Clear error state
+    ├── Close existing connection
+    └── Attempt new connection
+```
+
+## 12. STATE MANAGEMENT ARCHITECTURE
+```
+Component State (useState):
+    ├── Local component state
+    ├── Form inputs
+    ├── UI state (modals, tabs, etc.)
+    └── Component-specific data
+    ↓
+WebSocket State (useWebSocket):
+    ├── Connection status
+    ├── Real-time data
+    ├── Trading functions
+    └── Bot control functions
+    ↓
+Custom Hooks:
+    ├── useCryptoDataBackend()
+    ├── useWebSocket()
+    └── Component-specific hooks
+    ↓
+Data Flow:
+    ├── WebSocket → Custom Hooks → Components
+    ├── User Actions → WebSocket → Backend
+    └── Backend → WebSocket → UI Updates
+```
+
+## 13. PERFORMANCE OPTIMIZATION
+```
+React.memo() for components:
+    ├── CryptoCard.js
+    ├── TradeHistoryItem.js
+    ├── PositionItem.js
+    └── BotStatusCard.js
+    ↓
+useMemo() for expensive calculations:
+    ├── Filtered crypto data
+    ├── Global statistics
+    ├── Performance metrics
+    └── Chart data processing
+    ↓
+useCallback() for stable functions:
+    ├── Event handlers
+    ├── WebSocket functions
+    ├── Trade execution functions
+    └── Bot control functions
+    ↓
+useEffect() dependencies:
+    ├── Only re-run when necessary
+    ├── Cleanup functions
+    └── Proper dependency arrays
+```
+
+## 14. RESPONSIVE DESIGN FLOW
+```
+CSS Media Queries:
+    ├── Mobile (< 768px)
+    ├── Tablet (768px - 1024px)
+    └── Desktop (> 1024px)
+    ↓
+Component Adaptations:
+    ├── Sidebar collapses on mobile
+    ├── Trading panel stacks vertically
+    ├── Charts resize appropriately
+    └── Tables become scrollable
+    ↓
+Touch Interactions:
+    ├── Swipe gestures for navigation
+    ├── Touch-friendly buttons
+    ├── Mobile-optimized forms
+    └── Responsive charts
+```
+
+## 15. SECURITY CONSIDERATIONS
+```
+Input Validation:
+    ├── Trade amount validation
+    ├── Symbol validation
+    ├── Price validation
+    └── Config parameter validation
+    ↓
+XSS Prevention:
+    ├── Sanitize user inputs
+    ├── Use React's built-in XSS protection
+    ├── Validate JSON data
+    └── Escape special characters
+    ↓
+WebSocket Security:
+    ├── Validate message format
+    ├── Handle malformed JSON
+    ├── Rate limit user actions
+    └── Validate data types
+```
+
+## 16. FILE STRUCTURE
+```
+src/
+├── index.js                    # Entry point
+├── App.js                      # Main app component
+├── App.css                     # Global styles
+├── components/                 # Reusable components
+│   ├── Header.js
+│   ├── Sidebar.js
+│   ├── TradingPanel.js
+│   ├── TradingBot.js
+│   ├── AIAnalysis.js
+│   ├── CryptoCard.js
+│   └── ... (other components)
+├── pages/                      # Page components
+│   ├── Dashboard.js
+│   ├── Portfolio.js
+│   ├── Trading.js
+│   ├── Charts.js
+│   ├── Analytics.js
+│   ├── News.js
+│   └── Settings.js
+├── hooks/                      # Custom hooks
+│   ├── useWebSocket.js
+│   ├── useCryptoData.js
+│   └── useCryptoDataBackend.js
+├── utils/                      # Utility functions
+│   ├── formatters.js
+│   ├── validators.js
+│   └── constants.js
+└── styles/                     # Component styles
+    ├── components/
+    └── pages/
+```
+
+## 17. MESSAGE FORMATS (Frontend → Backend)
+```
+Trade Execution:
+{
+  "type": "execute_trade",
+  "symbol": "BTCUSDT",
+  "direction": "BUY",
+  "amount": 0.1,
+  "price": 45000.0
+}
+
+Bot Control:
+{
+  "type": "start_bot",
+  "config": {
+    "max_trades_per_day": 10,
+    "trade_amount_usdt": 50,
+    "ai_confidence_threshold": 0.75
+  }
+}
+
+Data Requests:
+{
+  "type": "get_positions"
+}
+{
+  "type": "get_trade_history",
+  "limit": 50
+}
+{
+  "type": "get_crypto_data"
+}
+```
+
+## 18. MESSAGE FORMATS (Backend → Frontend)
+```
+Price Update:
+{
+  "type": "price_update",
+  "data": {
+    "symbol": "BTC",
+    "price": 45000.0,
+    "change_24h": 2.5,
+    "volume_24h": 25000000,
+    "market_cap": 850000000000,
+    "timestamp": 1640995200
+  }
+}
+
+Trade Executed:
+{
+  "type": "trade_executed",
+  "data": {
+    "trade": {
+      "trade_id": "trade_1640995200_BTC",
+      "symbol": "BTC",
+      "direction": "BUY",
+      "amount": 0.1,
+      "price": 45000.0,
+      "value": 4500.0,
+      "timestamp": 1640995200,
+      "trade_type": "MANUAL",
+      "status": "executed"
+    },
+    "new_balance": 95500.0,
+    "positions": {
+      "BTC": {
+        "symbol": "BTC",
+        "amount": 0.1,
+        "entry_price": 45000.0,
+        "current_price": 45000.0,
+        "unrealized_pnl": 0.0
+      }
+    }
+  }
+}
+
+Bot Status:
+{
+  "type": "bot_status_response",
+  "data": {
+    "enabled": true,
+    "start_time": 1640995200,
+    "active_trades": 2,
+    "trades_today": 5,
+    "total_profit": 150.0,
+    "total_trades": 25,
+    "winning_trades": 18,
+    "win_rate": 0.72,
+    "pair_status": {
+      "BTCUSDT": "in_trade",
+      "ETHUSDT": "idle"
+    }
+  }
+}
+```
+
+## 19. ERROR HANDLING PATTERNS
+```
+WebSocket Errors:
+├── Connection failed
+├── Message parsing errors
+├── Invalid data format
+└── Timeout errors
+
+User Input Errors:
+├── Invalid trade amounts
+├── Insufficient balance
+├── Invalid symbols
+└── Configuration errors
+
+Network Errors:
+├── API request failures
+├── WebSocket disconnections
+├── Timeout errors
+└── Rate limiting
+
+UI Error Display:
+├── Toast notifications
+├── Error modals
+├── Inline error messages
+└── Status indicators
+```
+
+## 20. TESTING STRATEGY
+```
+Unit Tests:
+├── Component rendering
+├── Hook functionality
+├── Utility functions
+└── State management
+
+Integration Tests:
+├── WebSocket communication
+├── Component interactions
+├── Data flow
+└── User workflows
+
+E2E Tests:
+├── Complete trading flow
+├── Bot operation
+├── Real-time updates
+└── Error scenarios
+
+Mock Data:
+├── WebSocket messages
+├── API responses
+├── User interactions
+└── Error conditions
+``` 

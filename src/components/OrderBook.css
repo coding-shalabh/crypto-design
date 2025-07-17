@@ -1,0 +1,128 @@
+.orderbook {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 12px;
+  color: #ffffff;
+}
+
+.orderbook-asks {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.orderbook-bids {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.orderbook-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background-color 0.1s;
+  position: relative;
+  z-index: 1;
+}
+
+.orderbook-row:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+.orderbook-row.ask {
+  color: #ff4444;
+}
+
+.orderbook-row.bid {
+  color: #00ff00;
+}
+
+.price {
+  font-weight: 500;
+  text-align: left;
+}
+
+.size {
+  text-align: center;
+  color: #cccccc;
+}
+
+.sum {
+  text-align: right;
+  color: #888888;
+}
+
+.ask-price {
+  color: #ff4444;
+}
+
+.bid-price {
+  color: #00ff00;
+}
+
+.current-price-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  padding: 8px;
+  background: #1a1a1a;
+  border-top: 1px solid #2a2a2a;
+  border-bottom: 1px solid #2a2a2a;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.current-price-label {
+  font-size: 10px;
+  color: #888888;
+  text-align: center;
+}
+
+.current-price-value {
+  text-align: center;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* Depth visualization */
+.orderbook-row.ask::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  background: linear-gradient(to left, rgba(255, 0, 0, 0.1), transparent);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.orderbook-row.bid::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  background: linear-gradient(to left, rgba(0, 255, 0, 0.1), transparent);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .orderbook {
+    font-size: 10px;
+  }
+  
+  .orderbook-row {
+    padding: 2px 4px;
+  }
+  
+  .current-price-row {
+    padding: 4px;
+  }
+} 

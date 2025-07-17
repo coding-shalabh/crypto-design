@@ -10,7 +10,7 @@
   flex: 1;
   margin-left: 280px;
   padding: 20px;
-  background: #f8f9fa;
+  background: #131313;
   min-height: calc(100vh - 140px);
   transition: margin-left 0.3s ease;
 }
@@ -41,7 +41,7 @@
 
 /* Footer */
 .footer {
-  background: white;
+  background: #131313;
   border-top: 1px solid #e1e5e9;
   padding: 1.5rem 0;
   text-align: center;
@@ -77,7 +77,7 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #f8f9fa;
+  background: #131313;
 }
 
 /* Utility classes */
@@ -98,7 +98,7 @@ button:focus,
 input:focus,
 select:focus,
 textarea:focus {
-  outline: 2px solid #1e3c72;
+  outline: 2px solid #ff8000;
   outline-offset: 2px;
 }
 

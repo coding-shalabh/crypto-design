@@ -7,11 +7,11 @@
 }
 
 .stat-card {
-    background: var(--surface);
+    background: #131313;
     padding: 1.5rem;
-    border-radius: var(--radius);
-    border: 1px solid var(--border);
-    transition: var(--transition);
+    border-radius: 12px;
+    border: 1px solid #4c4c4c;
+    transition: all 0.2s ease;
 }
 
 .stat-card:hover {

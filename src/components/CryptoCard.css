@@ -1,10 +1,10 @@
 /* Crypto card */
 .crypto-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    background: #131313;
+    border: 1px solid #4c4c4c;
+    border-radius: 12px;
     padding: 1.5rem;
-    transition: var(--transition);
+    transition: all 0.2s ease;
     cursor: pointer;
     position: relative;
     overflow: hidden;
@@ -12,8 +12,8 @@
 
 .crypto-card:hover {
     transform: translateY(-4px);
-    box-shadow: var(--shadow-lg);
-    border-color: var(--primary-color);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    border-color: #4c4c4c;
 }
 
 .crypto-card.list-view {
@@ -57,7 +57,7 @@
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: var(--surface-light);
+    background: #131313;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -68,24 +68,24 @@
 .crypto-symbol {
     font-weight: 700;
     font-size: 1.125rem;
-    color: var(--text-primary);
+    color: #ffffff;
 }
 
 .crypto-full-name {
     font-size: 0.875rem;
-    color: var(--text-secondary);
+    color: #888888;
 }
 
 .crypto-rank {
     font-size: 0.875rem;
-    color: var(--text-muted);
+    color: #888888;
     font-weight: 500;
 }
 
 .crypto-price {
     font-size: 1.25rem;
     font-weight: 700;
-    color: var(--text-primary);
+    color: #ffffff;
     margin-bottom: 0.5rem;
 }
 
@@ -104,11 +104,11 @@
 }
 
 .price-change.positive {
-    color: var(--secondary-color);
+    color: #4c4c4c;
 }
 
 .price-change.negative {
-    color: var(--danger-color);
+    color: #ff0000;
 }
 
 .price-change i {
@@ -136,7 +136,7 @@
 
 .stat-label {
     font-size: 0.75rem;
-    color: var(--text-muted);
+    color: #888888;
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
@@ -144,7 +144,7 @@
 .stat-value {
     font-size: 0.875rem;
     font-weight: 600;
-    color: var(--text-primary);
+    color: #ffffff;
 }
 
 /* Responsive design */

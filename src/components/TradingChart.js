@@ -1,509 +1,371 @@
-import React, { useState, useEffect } from "react";
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-} from "chart.js";
-import { Line, Bar } from "react-chartjs-2";
+import React, { useRef, useEffect, useState } from "react";
 import "./TradingChart.css";
+import {
+  FiTrendingUp,
+  FiActivity,
+  FiBarChart2,
+  FiLayers,
+  FiCircle,
+  FiTrash2,
+  FiSliders,
+  FiEye,
+  FiGrid,
+  FiChevronRight,
+  FiChevronLeft,
+  FiSettings,
+  FiPlusCircle,
+} from "react-icons/fi";
 
-// Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-);
+// TradingView widget loader
+const TradingViewWidget = ({
+  symbol = "BTCUSDT",
+  interval = "D",
+  theme = "light",
+  studies = [],
+  drawings = [],
+  containerId = "tradingview_chart",
+  autosize = true,
+  locale = "en",
+  onWidgetReady,
+}) => {
+  const widgetRef = useRef(null);
+
+  useEffect(() => {
+    // Remove previous widget if exists
+    if (widgetRef.current) {
+      widgetRef.current.innerHTML = "";
+    }
+    // Load TradingView script if not already loaded
+    if (!window.TradingView) {
+      const script = document.createElement("script");
+      script.src = "https://s3.tradingview.com/tv.js";
+      script.async = true;
+      script.onload = () => {
+        createWidget();
+      };
+      document.body.appendChild(script);
+    } else {
+      createWidget();
+    }
+
+    function createWidget() {
+      if (window.TradingView && window.TradingView.widget) {
+        /* global TradingView */
+        new window.TradingView.widget({
+          autosize,
+          symbol,
+          interval,
+          timezone: "Etc/UTC",
+          theme,
+          style: "1",
+          locale,
+          toolbar_bg: theme === "dark" ? "#181A20" : "#fff",
+          enable_publishing: false,
+          allow_symbol_change: true,
+          container_id: containerId,
+          studies,
+          drawings_access: {
+            type: "black",
+            tools: drawings,
+          },
+          withdateranges: true,
+          hide_side_toolbar: false,
+          details: true,
+          hotlist: true,
+          calendar: true,
+          studies_overrides: {},
+          overrides: {},
+          loading_screen: { backgroundColor: theme === "dark" ? "#181A20" : "#fff", foregroundColor: "#2196F3" },
+          events: {
+            onReady: onWidgetReady,
+          },
+        });
+      }
+    }
+    // eslint-disable-next-line
+  }, [symbol, interval, theme, studies, drawings, containerId, autosize, locale, onWidgetReady]);
+
+  return <div id={containerId} ref={widgetRef} style={{ width: "100%", height: "100%" }} />;
+};
+
+const INDICATOR_LIST = [
+  { key: "SMA", label: "SMA", icon: <FiTrendingUp /> },
+  { key: "EMA", label: "EMA", icon: <FiActivity /> },
+  { key: "BOLL", label: "Bollinger Bands", icon: <FiBarChart2 /> },
+  { key: "RSI", label: "RSI", icon: <FiSliders /> },
+  { key: "MACD", label: "MACD", icon: <FiGrid /> },
+  { key: "VOLUME", label: "Volume", icon: <FiBarChart2 /> },
+];
+
+const DRAWING_TOOLS = [
+  { key: "trend_line", label: "Trend Line", icon: <FiTrendingUp /> },
+  { key: "fibonacci", label: "Fibonacci", icon: <FiLayers /> },
+  { key: "rectangle", label: "Rectangle", icon: <FiBarChart2 /> },
+  { key: "ellipse", label: "Ellipse", icon: <FiCircle /> },
+];
+
+const PATTERNS = [
+  { key: "head_and_shoulders", label: "Head & Shoulders" },
+  { key: "double_top", label: "Double Top" },
+  { key: "double_bottom", label: "Double Bottom" },
+  { key: "triangle", label: "Triangle" },
+  { key: "flag", label: "Flag" },
+  { key: "cup_and_handle", label: "Cup & Handle" },
+];
 
 const TradingChart = ({
-  coinData,
-  timeframe,
-  chartType,
+  coinData = "BTCUSDT",
+  timeframe = "1D",
+  chartType = "candlestick",
   onChartReady,
   theme = "light",
 }) => {
-  const [indicators, setIndicators] = useState({
-    sma: { enabled: false, period: 20 },
-    ema: { enabled: false, period: 20 },
-    bollinger: { enabled: false, period: 20, stdDev: 2 },
-    rsi: { enabled: false, period: 14 },
-    macd: { enabled: false },
-    volume: { enabled: true },
-  });
-  const [drawingTool, setDrawingTool] = useState(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [priceScale, setPriceScale] = useState("right");
-  const [timeScale, setTimeScale] = useState("visible");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activeIndicators, setActiveIndicators] = useState([]);
+  const [activeDrawings, setActiveDrawings] = useState([]);
+  const [activePattern, setActivePattern] = useState(null);
+  const [showPatternPanel, setShowPatternPanel] = useState(false);
 
-  // Generate sample data
-  const generateSampleData = (count) => {
-    const labels = [];
-    const prices = [];
-    const volumes = [];
-    let price = 50000;
-    let volume = 1000000;
+  // Map timeframe to TradingView interval
+  const intervalMap = {
+    "1m": "1",
+    "5m": "5",
+    "15m": "15",
+    "30m": "30",
+    "1H": "60",
+    "4H": "240",
+    "1D": "D",
+    "1W": "W",
+    "1M": "M",
+    "1d": "D",
+    "1w": "W",
+    "1m": "1",
+    "1h": "60",
+    "4h": "240",
+  };
+  const interval = intervalMap[timeframe] || "D";
 
-    for (let i = 0; i < count; i++) {
-      const date = new Date();
-      date.setDate(date.getDate() - (count - i));
-      labels.push(date.toLocaleDateString());
-
-      const change = (Math.random() - 0.5) * 0.1;
-      price = price * (1 + change);
-      prices.push(price);
-
-      volume = volume * (0.8 + Math.random() * 0.4);
-      volumes.push(volume);
-    }
-
-    return { labels, prices, volumes };
+  // TradingView studies mapping
+  const indicatorToStudy = {
+    SMA: "MAExp@tv-basicstudies",
+    EMA: "EMA@tv-basicstudies",
+    BOLL: "BollingerBands@tv-basicstudies",
+    RSI: "RSI@tv-basicstudies",
+    MACD: "MACD@tv-basicstudies",
+    VOLUME: "Volume@tv-basicstudies",
   };
 
-  const { labels, prices, volumes } = generateSampleData(30);
-
-  // Calculate technical indicators
-  const calculateSMA = (data, period) => {
-    const sma = [];
-    for (let i = period - 1; i < data.length; i++) {
-      const sum = data
-        .slice(i - period + 1, i + 1)
-        .reduce((acc, val) => acc + val, 0);
-      sma.push(sum / period);
-    }
-    return sma;
+  // TradingView drawing tools mapping
+  const drawingToTool = {
+    trend_line: "trend_line",
+    fibonacci: "fibonacci_retracement",
+    rectangle: "rectangle",
+    ellipse: "ellipse",
   };
 
-  const calculateEMA = (data, period) => {
-    const ema = [];
-    const multiplier = 2 / (period + 1);
-
-    // First EMA is SMA
-    let sum = data.slice(0, period).reduce((acc, val) => acc + val, 0);
-    ema.push(sum / period);
-
-    for (let i = period; i < data.length; i++) {
-      const newEMA =
-        data[i] * multiplier + ema[ema.length - 1] * (1 - multiplier);
-      ema.push(newEMA);
-    }
-    return ema;
-  };
-
-  const calculateBollingerBands = (data, period, stdDev) => {
-    const upper = [];
-    const middle = [];
-    const lower = [];
-
-    for (let i = period - 1; i < data.length; i++) {
-      const slice = data.slice(i - period + 1, i + 1);
-      const sma = slice.reduce((acc, val) => acc + val, 0) / period;
-      const variance =
-        slice.reduce((acc, val) => acc + Math.pow(val - sma, 2), 0) / period;
-      const standardDeviation = Math.sqrt(variance);
-
-      middle.push(sma);
-      upper.push(sma + standardDeviation * stdDev);
-      lower.push(sma - standardDeviation * stdDev);
-    }
-
-    return { upper, middle, lower };
-  };
-
-  // Chart configuration
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: "top",
-        labels: {
-          color: theme === "dark" ? "#d1d4dc" : "#333",
-        },
-      },
-      title: {
-        display: true,
-        text: `${coinData} Price Chart - ${timeframe}`,
-        color: theme === "dark" ? "#d1d4dc" : "#333",
-      },
-      tooltip: {
-        mode: "index",
-        intersect: false,
-      },
-    },
-    scales: {
-      x: {
-        display: true,
-        title: {
-          display: true,
-          text: "Date",
-          color: theme === "dark" ? "#d1d4dc" : "#333",
-        },
-        ticks: {
-          color: theme === "dark" ? "#d1d4dc" : "#333",
-        },
-        grid: {
-          color: theme === "dark" ? "#404040" : "#e1e3ef",
-        },
-      },
-      y: {
-        display: true,
-        title: {
-          display: true,
-          text: "Price (USD)",
-          color: theme === "dark" ? "#d1d4dc" : "#333",
-        },
-        ticks: {
-          color: theme === "dark" ? "#d1d4dc" : "#333",
-        },
-        grid: {
-          color: theme === "dark" ? "#404040" : "#e1e3ef",
-        },
-      },
-    },
-    interaction: {
-      mode: "nearest",
-      axis: "x",
-      intersect: false,
-    },
-  };
-
-  // Prepare datasets
-  const datasets = [
-    {
-      label: "Price",
-      data: prices,
-      borderColor: "#1e3c72",
-      backgroundColor: "rgba(30, 60, 114, 0.1)",
-      borderWidth: 2,
-      fill: false,
-      tension: 0.1,
-    },
-  ];
-
-  // Add technical indicators
-  if (indicators.sma.enabled) {
-    const smaData = calculateSMA(prices, indicators.sma.period);
-    datasets.push({
-      label: `SMA ${indicators.sma.period}`,
-      data: [...Array(indicators.sma.period - 1).fill(null), ...smaData],
-      borderColor: "#2196F3",
-      backgroundColor: "transparent",
-      borderWidth: 2,
-      fill: false,
-      tension: 0.1,
-    });
-  }
-
-  if (indicators.ema.enabled) {
-    const emaData = calculateEMA(prices, indicators.ema.period);
-    datasets.push({
-      label: `EMA ${indicators.ema.period}`,
-      data: [...Array(indicators.ema.period - 1).fill(null), ...emaData],
-      borderColor: "#FF9800",
-      backgroundColor: "transparent",
-      borderWidth: 2,
-      fill: false,
-      tension: 0.1,
-    });
-  }
-
-  if (indicators.bollinger.enabled) {
-    const bollingerData = calculateBollingerBands(
-      prices,
-      indicators.bollinger.period,
-      indicators.bollinger.stdDev
+  // Handle indicator toggle
+  const handleIndicatorToggle = (key) => {
+    setActiveIndicators((prev) =>
+      prev.includes(key)
+        ? prev.filter((i) => i !== key)
+        : [...prev, key]
     );
-    datasets.push(
-      {
-        label: "Bollinger Upper",
-        data: [
-          ...Array(indicators.bollinger.period - 1).fill(null),
-          ...bollingerData.upper,
-        ],
-        borderColor: "#4CAF50",
-        backgroundColor: "transparent",
-        borderWidth: 1,
-        fill: false,
-        tension: 0.1,
-      },
-      {
-        label: "Bollinger Middle",
-        data: [
-          ...Array(indicators.bollinger.period - 1).fill(null),
-          ...bollingerData.middle,
-        ],
-        borderColor: "#9C27B0",
-        backgroundColor: "transparent",
-        borderWidth: 1,
-        fill: false,
-        tension: 0.1,
-      },
-      {
-        label: "Bollinger Lower",
-        data: [
-          ...Array(indicators.bollinger.period - 1).fill(null),
-          ...bollingerData.lower,
-        ],
-        borderColor: "#F44336",
-        backgroundColor: "transparent",
-        borderWidth: 1,
-        fill: false,
-        tension: 0.1,
-      }
+  };
+
+  // Handle drawing tool toggle
+  const handleDrawingToggle = (key) => {
+    setActiveDrawings((prev) =>
+      prev.includes(key)
+        ? prev.filter((i) => i !== key)
+        : [...prev, key]
     );
-  }
-
-  // Volume chart data
-  const volumeData = {
-    labels: labels,
-    datasets: [
-      {
-        label: "Volume",
-        data: volumes,
-        backgroundColor: "rgba(30, 60, 114, 0.6)",
-        borderColor: "#1e3c72",
-        borderWidth: 1,
-      },
-    ],
   };
 
-  const toggleIndicator = (indicator) => {
-    setIndicators((prev) => ({
-      ...prev,
-      [indicator]: { ...prev[indicator], enabled: !prev[indicator].enabled },
-    }));
+  // Handle pattern selection
+  const handlePatternSelect = (key) => {
+    setActivePattern(key);
+    setShowPatternPanel(false);
   };
 
-  const updateIndicatorPeriod = (indicator, period) => {
-    setIndicators((prev) => ({
-      ...prev,
-      [indicator]: { ...prev[indicator], period: parseInt(period) },
-    }));
+  // Handle clear chart (reset indicators, drawings, pattern)
+  const handleClear = () => {
+    setActiveIndicators([]);
+    setActiveDrawings([]);
+    setActivePattern(null);
   };
 
-  const handleDrawingTool = (tool) => {
-    setDrawingTool(tool);
-    setIsDrawing(false);
-  };
-
-  const clearChart = () => {
-    // This would clear the chart data
-    console.log("Chart cleared");
-  };
-
+  // Notify parent when chart is ready
   useEffect(() => {
     if (onChartReady) {
-      onChartReady({ type: "chartjs", data: { labels, prices, volumes } });
+      onChartReady({
+        type: "tradingview",
+        data: {
+          symbol: coinData,
+          interval,
+          indicators: activeIndicators,
+          drawings: activeDrawings,
+          pattern: activePattern,
+        },
+      });
     }
-  }, [onChartReady, labels, prices, volumes]);
+    // eslint-disable-next-line
+  }, [onChartReady, coinData, interval, activeIndicators, activeDrawings, activePattern]);
 
   return (
-    <div className="trading-chart-container">
-      <div className="chart-toolbar">
-        <div className="toolbar-section">
-          <h4>Indicators</h4>
-          <div className="indicator-controls">
-            <label className="indicator-toggle">
-              <input
-                type="checkbox"
-                checked={indicators.sma.enabled}
-                onChange={() => toggleIndicator("sma")}
-              />
-              SMA
-              {indicators.sma.enabled && (
-                <input
-                  type="number"
-                  value={indicators.sma.period}
-                  onChange={(e) => updateIndicatorPeriod("sma", e.target.value)}
-                  min="1"
-                  max="200"
-                  className="period-input"
-                />
+    <div className="trading-chart-container tradingview-layout">
+      <div className={`tradingview-sidebar ${sidebarOpen ? "open" : "closed"}`}>
+        <div className="sidebar-toggle" onClick={() => setSidebarOpen((v) => !v)}>
+          {sidebarOpen ? <FiChevronLeft /> : <FiChevronRight />}
+        </div>
+        {sidebarOpen && (
+          <div className="sidebar-content">
+            <div className="sidebar-section">
+              <h4>
+                <FiSliders style={{ marginRight: 6 }} />
+                Indicators
+              </h4>
+              <div className="indicator-controls">
+                {INDICATOR_LIST.map((ind) => (
+                  <button
+                    key={ind.key}
+                    className={`indicator-btn${activeIndicators.includes(ind.key) ? " active" : ""}`}
+                    onClick={() => handleIndicatorToggle(ind.key)}
+                  >
+                    {ind.icon}
+                    <span style={{ marginLeft: 6 }}>{ind.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="sidebar-section">
+              <h4>
+                <FiLayers style={{ marginRight: 6 }} />
+                Drawing Tools
+              </h4>
+              <div className="drawing-tools">
+                {DRAWING_TOOLS.map((tool) => (
+                  <button
+                    key={tool.key}
+                    className={`tool-btn${activeDrawings.includes(tool.key) ? " active" : ""}`}
+                    onClick={() => handleDrawingToggle(tool.key)}
+                  >
+                    {tool.icon}
+                    <span style={{ marginLeft: 6 }}>{tool.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="sidebar-section">
+              <h4>
+                <FiPlusCircle style={{ marginRight: 6 }} />
+                Pattern Addwell
+              </h4>
+              <button
+                className="pattern-btn"
+                onClick={() => setShowPatternPanel((v) => !v)}
+              >
+                {activePattern
+                  ? PATTERNS.find((p) => p.key === activePattern)?.label
+                  : "Select Pattern"}
+                <FiChevronRight style={{ marginLeft: 8 }} />
+              </button>
+              {showPatternPanel && (
+                <div className="pattern-panel">
+                  {PATTERNS.map((pattern) => (
+                    <div
+                      key={pattern.key}
+                      className={`pattern-item${activePattern === pattern.key ? " selected" : ""}`}
+                      onClick={() => handlePatternSelect(pattern.key)}
+                    >
+                      {pattern.label}
+                    </div>
+                  ))}
+                </div>
               )}
-            </label>
-
-            <label className="indicator-toggle">
-              <input
-                type="checkbox"
-                checked={indicators.ema.enabled}
-                onChange={() => toggleIndicator("ema")}
-              />
-              EMA
-              {indicators.ema.enabled && (
-                <input
-                  type="number"
-                  value={indicators.ema.period}
-                  onChange={(e) => updateIndicatorPeriod("ema", e.target.value)}
-                  min="1"
-                  max="200"
-                  className="period-input"
-                />
-              )}
-            </label>
-
-            <label className="indicator-toggle">
-              <input
-                type="checkbox"
-                checked={indicators.bollinger.enabled}
-                onChange={() => toggleIndicator("bollinger")}
-              />
-              Bollinger Bands
-            </label>
-
-            <label className="indicator-toggle">
-              <input
-                type="checkbox"
-                checked={indicators.rsi.enabled}
-                onChange={() => toggleIndicator("rsi")}
-              />
-              RSI
-            </label>
-
-            <label className="indicator-toggle">
-              <input
-                type="checkbox"
-                checked={indicators.macd.enabled}
-                onChange={() => toggleIndicator("macd")}
-              />
-              MACD
-            </label>
-
-            <label className="indicator-toggle">
-              <input
-                type="checkbox"
-                checked={indicators.volume.enabled}
-                onChange={() => toggleIndicator("volume")}
-              />
-              Volume
-            </label>
-          </div>
-        </div>
-
-        <div className="toolbar-section">
-          <h4>Drawing Tools</h4>
-          <div className="drawing-tools">
-            <button
-              className={`tool-btn ${
-                drawingTool === "trendline" ? "active" : ""
-              }`}
-              onClick={() => handleDrawingTool("trendline")}
-            >
-              📈 Trend Line
-            </button>
-            <button
-              className={`tool-btn ${
-                drawingTool === "fibonacci" ? "active" : ""
-              }`}
-              onClick={() => handleDrawingTool("fibonacci")}
-            >
-              📐 Fibonacci
-            </button>
-            <button
-              className={`tool-btn ${
-                drawingTool === "rectangle" ? "active" : ""
-              }`}
-              onClick={() => handleDrawingTool("rectangle")}
-            >
-              ⬜ Rectangle
-            </button>
-            <button
-              className={`tool-btn ${
-                drawingTool === "ellipse" ? "active" : ""
-              }`}
-              onClick={() => handleDrawingTool("ellipse")}
-            >
-              ⭕ Ellipse
-            </button>
-          </div>
-        </div>
-
-        <div className="toolbar-section">
-          <h4>Chart Options</h4>
-          <div className="chart-options">
-            <button className="tool-btn" onClick={clearChart}>
-              🗑️ Clear
-            </button>
-            <button
-              className="tool-btn"
-              onClick={() =>
-                setPriceScale(priceScale === "right" ? "left" : "right")
-              }
-            >
-              📊 Price Scale: {priceScale}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="chart-wrapper">
-        <div className="chart-container" style={{ height: "400px" }}>
-          <Line data={{ labels, datasets }} options={chartOptions} />
-        </div>
-
-        {indicators.volume.enabled && (
-          <div
-            className="volume-container"
-            style={{ height: "150px", marginTop: "20px" }}
-          >
-            <Bar
-              data={volumeData}
-              options={{
-                ...chartOptions,
-                plugins: {
-                  ...chartOptions.plugins,
-                  title: {
-                    display: true,
-                    text: "Volume",
-                    color: theme === "dark" ? "#d1d4dc" : "#333",
-                  },
-                },
-                scales: {
-                  ...chartOptions.scales,
-                  y: {
-                    ...chartOptions.scales.y,
-                    title: {
-                      display: true,
-                      text: "Volume",
-                      color: theme === "dark" ? "#d1d4dc" : "#333",
-                    },
-                  },
-                },
-              }}
-            />
+            </div>
+            <div className="sidebar-section">
+              <h4>
+                <FiSettings style={{ marginRight: 6 }} />
+                Chart Options
+              </h4>
+              <div className="chart-options">
+                <button className="tool-btn" onClick={handleClear}>
+                  <FiTrash2 style={{ marginRight: 6 }} />
+                  Clear
+                </button>
+                {/* You can add more chart options here */}
+              </div>
+            </div>
+            <div className="sidebar-section">
+              <h4>
+                <FiEye style={{ marginRight: 6 }} />
+                Chart Info
+              </h4>
+              <div className="chart-info">
+                <div className="info-item">
+                  <span className="info-label">Timeframe:</span>
+                  <span className="info-value">{timeframe}</span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Chart Type:</span>
+                  <span className="info-value">{chartType}</span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Active Indicators:</span>
+                  <span className="info-value">
+                    {activeIndicators.length
+                      ? activeIndicators.join(", ")
+                      : "None"}
+                  </span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Active Drawings:</span>
+                  <span className="info-value">
+                    {activeDrawings.length
+                      ? activeDrawings.join(", ")
+                      : "None"}
+                  </span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Pattern:</span>
+                  <span className="info-value">
+                    {activePattern
+                      ? PATTERNS.find((p) => p.key === activePattern)?.label
+                      : "None"}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
-
-      <div className="chart-info">
-        <div className="info-item">
-          <span className="info-label">Timeframe:</span>
-          <span className="info-value">{timeframe}</span>
-        </div>
-        <div className="info-item">
-          <span className="info-label">Chart Type:</span>
-          <span className="info-value">{chartType}</span>
-        </div>
-        <div className="info-item">
-          <span className="info-label">Active Indicators:</span>
-          <span className="info-value">
-            {Object.entries(indicators)
-              .filter(([_, config]) => config.enabled)
-              .map(([name, _]) => name.toUpperCase())
-              .join(", ") || "None"}
-          </span>
-        </div>
+      <div className="tradingview-main-panel">
+        <TradingViewWidget
+          symbol={coinData}
+          interval={interval}
+          theme={theme}
+          studies={activeIndicators.map((ind) => indicatorToStudy[ind]).filter(Boolean)}
+          drawings={activeDrawings.map((draw) => drawingToTool[draw]).filter(Boolean)}
+          containerId="tradingview_chart"
+          autosize={true}
+          locale="en"
+          onWidgetReady={() => {}}
+        />
+        {/* Optionally, show pattern overlay panel */}
+        {activePattern && (
+          <div className="pattern-overlay">
+            <span>
+              Pattern: {PATTERNS.find((p) => p.key === activePattern)?.label}
+            </span>
+            <button
+              className="close-pattern-btn"
+              onClick={() => setActivePattern(null)}
+              title="Remove Pattern"
+            >
+              <FiTrash2 />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
