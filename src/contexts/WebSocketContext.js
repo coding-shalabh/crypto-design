@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import apiService from '../services/apiService';
+import { toast } from 'react-toastify';
 
 const WebSocketContext = createContext();
 
@@ -33,7 +34,19 @@ export const WebSocketProvider = ({ children }) => {
     paper_balance: 0, 
     recent_trades: [], 
     ai_analysis: {}, 
-    ai_opportunities: {} 
+    ai_opportunities: {},
+    bot_status: {
+      enabled: false,
+      start_time: null,
+      active_trades: 0,
+      trades_today: 0,
+      total_profit: 0,
+      total_trades: 0,
+      winning_trades: 0,
+      win_rate: 0,
+      pair_status: {},
+      running_duration: 0
+    }
   });
   const [error, setError] = useState(null);
   
@@ -73,7 +86,7 @@ export const WebSocketProvider = ({ children }) => {
       setConnectionStatus('connecting');
       
       // 🔧 FIXED: Create WebSocket with proper URL
-      const wsUrl = process.env.REACT_APP_WS_URL || 'ws://localhost:8768';
+      const wsUrl = process.env.REACT_APP_WS_URL || 'ws://localhost:8767';
       console.log('🔍 WebSocketProvider: Connecting to:', wsUrl);
       
       const newSocket = new WebSocket(wsUrl);
@@ -96,6 +109,18 @@ export const WebSocketProvider = ({ children }) => {
         setError(null); // Clear any previous errors
         reconnectAttemptsRef.current = 0;
         isReconnectingRef.current = false;
+        
+        // Show success toast on connection
+        if (reconnectAttemptsRef.current > 0) {
+          toast.success('Connection restored successfully!', {
+            position: "top-right",
+            autoClose: 2000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+          });
+        }
         
         // 🔧 FIXED: Start heartbeat
         startHeartbeat();
@@ -184,6 +209,34 @@ export const WebSocketProvider = ({ children }) => {
                 [messageData.data.symbol]: messageData.data
               }
             }));
+          } else if (messageData.type === 'bot_status_response' && messageData.data) {
+            setData(prevData => ({
+              ...prevData,
+              bot_status: {
+                ...prevData.bot_status,
+                ...messageData.data
+              }
+            }));
+          } else if (messageData.type === 'start_bot_response' && messageData.data) {
+            if (messageData.data.success) {
+              setData(prevData => ({
+                ...prevData,
+                bot_status: {
+                  ...prevData.bot_status,
+                  enabled: true
+                }
+              }));
+            }
+          } else if (messageData.type === 'stop_bot_response' && messageData.data) {
+            if (messageData.data.success) {
+              setData(prevData => ({
+                ...prevData,
+                bot_status: {
+                  ...prevData.bot_status,
+                  enabled: false
+                }
+              }));
+            }
           }
           
           // 🔧 DEPRECATED: AI analysis messages are now handled directly in the main context
@@ -219,6 +272,16 @@ export const WebSocketProvider = ({ children }) => {
         clearTimeout(connectionTimeout);
         setConnectionStatus('error');
         setError('WebSocket connection error');
+        
+        // Show user-friendly toast notification instead of breaking the page
+        toast.error('Connection issue detected. Attempting to reconnect...', {
+          position: "top-right",
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
       };
       
       newSocket.onclose = (event) => {

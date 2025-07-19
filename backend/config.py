@@ -48,7 +48,7 @@ class Config:
         'trailing_enabled': True,
         'trailing_trigger_usd': 1,
         'trailing_distance_usd': 0.5,
-        'trade_interval_secs': 600,  # 10 minutes between analysis cycles
+        'trade_interval_secs': 60,  # 1 minute between analysis cycles - OPTIMIZED for faster response
         'max_concurrent_trades': 20,
         'cooldown_secs': 300,
         'allowed_pairs': ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
@@ -66,7 +66,7 @@ class Config:
         'reconfirm_before_entry': True,
         # Analysis settings
         'analyze_all_pairs': True,  # Always analyze all pairs regardless of active trades
-        'analysis_interval_minutes': 10,  # Analysis interval in minutes
+        'analysis_interval_minutes': 1,  # Analysis interval in minutes - OPTIMIZED for faster bot startup
         # Additional settings from research document
         'daily_loss_limit_percent': 2.0,  # 2% daily loss limit
         'min_risk_reward_ratio': 1.5,  # Minimum 1:1.5 risk/reward

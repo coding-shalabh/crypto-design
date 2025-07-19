@@ -11,6 +11,9 @@ import { store } from './store/store';
 // Import WebSocket context
 import { WebSocketProvider } from './contexts/WebSocketContext';
 
+// Import real-time price service
+import realTimePriceService from './services/realTimePriceService';
+
 // Import pages
 import Dashboard from './pages/Dashboard';
 import Trading from './pages/Trading';
@@ -23,6 +26,7 @@ import Login from './pages/Login';
 // Import components
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
+import ErrorBoundary from './components/ErrorBoundary';
 
 function App() {
   console.log('🔍 App: Application component initialized');
@@ -37,8 +41,16 @@ function App() {
     console.log('🔍 App: Current authentication status:', isAuthenticated);
     console.log('🔍 App: Available routes:', ['/', '/trading', '/analytics', '/settings', '/login']);
     
+    // 🔥 Initialize real-time price service with Redux store
+    if (isAuthenticated) {
+      console.log('🔍 App: Initializing real-time price service...');
+      realTimePriceService.init(store);
+    }
+    
     return () => {
       console.log('🔍 App: Component unmounting');
+      // Cleanup real-time price service
+      realTimePriceService.cleanup();
     };
   }, [isAuthenticated]);
 
@@ -81,101 +93,109 @@ function App() {
   return (
     <Provider store={store}>
       <WebSocketProvider>
-        <Router>
-        <div className="App">
-          <Sidebar />
-          <div className="main-content">
-            <Header />
-            <Routes>
-              <Route 
-                path="/" 
-                element={
-                  <React.Fragment>
-                    {console.log('🔍 App: Rendering Dashboard route')}
-                    <Dashboard />
-                  </React.Fragment>
-                } 
-              />
-              <Route 
-                path="/trading" 
-                element={
-                  <React.Fragment>
-                    {console.log('🔍 App: Rendering Trading route')}
-                    <Trading />
-                  </React.Fragment>
-                } 
-              />
-              <Route 
-                path="/portfolio" 
-                element={
-                  <React.Fragment>
-                    {console.log('🔍 App: Rendering Portfolio route')}
-                    <Portfolio />
-                  </React.Fragment>
-                } 
-              />
-              <Route 
-                path="/charts" 
-                element={
-                  <React.Fragment>
-                    {console.log('🔍 App: Rendering Charts route (redirecting to Trading)')}
-                    <Trading />
-                  </React.Fragment>
-                } 
-              />
-              <Route 
-                path="/analytics" 
-                element={
-                  <React.Fragment>
-                    {console.log('🔍 App: Rendering Analytics route')}
-                    <Analytics />
-                  </React.Fragment>
-                } 
-              />
-              <Route 
-                path="/news" 
-                element={
-                  <React.Fragment>
-                    {console.log('🔍 App: Rendering News route')}
-                    <News />
-                  </React.Fragment>
-                } 
-              />
-              <Route 
-                path="/settings" 
-                element={
-                  <React.Fragment>
-                    {console.log('🔍 App: Rendering Settings route')}
-                    <Settings />
-                  </React.Fragment>
-                } 
-              />
-              <Route 
-                path="*" 
-                element={
-                  <React.Fragment>
-                    {console.log('🔍 App: Rendering default redirect to Dashboard')}
-                    <Navigate to="/" replace />
-                  </React.Fragment>
-                } 
-              />
-            </Routes>
+        <ErrorBoundary>
+          <Router>
+          <div className="App">
+            <ErrorBoundary>
+              <Sidebar />
+            </ErrorBoundary>
+            <div className="main-content">
+              <ErrorBoundary>
+                <Header />
+              </ErrorBoundary>
+              <ErrorBoundary>
+                <Routes>
+                  <Route 
+                    path="/" 
+                    element={
+                      <React.Fragment>
+                        {console.log('🔍 App: Rendering Dashboard route')}
+                        <Dashboard />
+                      </React.Fragment>
+                    } 
+                  />
+                  <Route 
+                    path="/trading" 
+                    element={
+                      <React.Fragment>
+                        {console.log('🔍 App: Rendering Trading route')}
+                        <Trading />
+                      </React.Fragment>
+                    } 
+                  />
+                  <Route 
+                    path="/portfolio" 
+                    element={
+                      <React.Fragment>
+                        {console.log('🔍 App: Rendering Portfolio route')}
+                        <Portfolio />
+                      </React.Fragment>
+                    } 
+                  />
+                  <Route 
+                    path="/charts" 
+                    element={
+                      <React.Fragment>
+                        {console.log('🔍 App: Rendering Charts route (redirecting to Trading)')}
+                        <Trading />
+                      </React.Fragment>
+                    } 
+                  />
+                  <Route 
+                    path="/analytics" 
+                    element={
+                      <React.Fragment>
+                        {console.log('🔍 App: Rendering Analytics route')}
+                        <Analytics />
+                      </React.Fragment>
+                    } 
+                  />
+                  <Route 
+                    path="/news" 
+                    element={
+                      <React.Fragment>
+                        {console.log('🔍 App: Rendering News route')}
+                        <News />
+                      </React.Fragment>
+                    } 
+                  />
+                  <Route 
+                    path="/settings" 
+                    element={
+                      <React.Fragment>
+                        {console.log('🔍 App: Rendering Settings route')}
+                        <Settings />
+                      </React.Fragment>
+                    } 
+                  />
+                  <Route 
+                    path="*" 
+                    element={
+                      <React.Fragment>
+                        {console.log('🔍 App: Rendering default redirect to Dashboard')}
+                        <Navigate to="/" replace />
+                      </React.Fragment>
+                    } 
+                  />
+                </Routes>
+              </ErrorBoundary>
+            </div>
           </div>
-        </div>
-        <ToastContainer 
-          position="top-right"
-          autoClose={3000}
-          hideProgressBar={false}
-          newestOnTop={false}
-          closeOnClick
-          rtl={false}
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-        />
-      </Router>
-    </WebSocketProvider>
-  </Provider>
+          <ToastContainer 
+            position="top-right"
+            autoClose={3000}
+            hideProgressBar={false}
+            newestOnTop={false}
+            closeOnClick
+            rtl={false}
+            pauseOnFocusLoss
+            draggable
+            pauseOnHover
+          />
+        </Router>
+        </ErrorBoundary>
+      </WebSocketProvider>
+    </Provider>
   );
 }
 

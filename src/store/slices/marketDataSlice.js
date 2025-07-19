@@ -11,6 +11,16 @@ const initialState = {
   newsData: [],
   aiAnalysis: {},
   aiOpportunities: {},
+  // 🔥 NEW: Real-time price management
+  realTimePrices: {},
+  priceHistory: {},
+  binanceConnectionStatus: 'disconnected',
+  priceUpdateStats: {
+    totalUpdates: 0,
+    lastUpdateTime: null,
+    updatesPerSecond: 0,
+  },
+  watchedSymbols: ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'SOLUSDT'],
 };
 
 const marketDataSlice = createSlice({
@@ -81,6 +91,113 @@ const marketDataSlice = createSlice({
         state.aiOpportunities[symbol] = state.aiOpportunities[symbol].slice(0, 10);
       }
     },
+    // 🔥 NEW: Real-time price management actions
+    updateRealTimePrice: (state, action) => {
+      const priceData = action.payload;
+      const { symbol } = priceData;
+      
+      // Update real-time prices
+      state.realTimePrices[symbol] = {
+        ...priceData,
+        lastUpdate: Date.now(),
+      };
+      
+      // Update price cache for backward compatibility
+      state.priceCache[symbol] = {
+        price: priceData.price,
+        change_24h: priceData.priceChangePercent,
+        volume: priceData.volume,
+        high_24h: priceData.highPrice,
+        low_24h: priceData.lowPrice,
+        timestamp: priceData.timestamp,
+      };
+      
+      // Update statistics
+      state.priceUpdateStats.totalUpdates += 1;
+      state.priceUpdateStats.lastUpdateTime = Date.now();
+      
+      // Store price history (keep last 100 updates per symbol)
+      if (!state.priceHistory[symbol]) {
+        state.priceHistory[symbol] = [];
+      }
+      state.priceHistory[symbol].unshift({
+        price: priceData.price,
+        timestamp: priceData.timestamp,
+      });
+      if (state.priceHistory[symbol].length > 100) {
+        state.priceHistory[symbol] = state.priceHistory[symbol].slice(0, 100);
+      }
+      
+      state.lastUpdate = Date.now();
+    },
+    batchUpdateRealTimePrices: (state, action) => {
+      const priceUpdates = action.payload;
+      const updateTime = Date.now();
+      
+      priceUpdates.forEach(priceData => {
+        const { symbol } = priceData;
+        
+        // Update real-time prices
+        state.realTimePrices[symbol] = {
+          ...priceData,
+          lastUpdate: updateTime,
+        };
+        
+        // Update price cache for backward compatibility
+        state.priceCache[symbol] = {
+          price: priceData.price,
+          change_24h: priceData.priceChangePercent,
+          volume: priceData.volume,
+          high_24h: priceData.highPrice,
+          low_24h: priceData.lowPrice,
+          timestamp: priceData.timestamp,
+        };
+        
+        // Store price history
+        if (!state.priceHistory[symbol]) {
+          state.priceHistory[symbol] = [];
+        }
+        state.priceHistory[symbol].unshift({
+          price: priceData.price,
+          timestamp: priceData.timestamp,
+        });
+        if (state.priceHistory[symbol].length > 100) {
+          state.priceHistory[symbol] = state.priceHistory[symbol].slice(0, 100);
+        }
+      });
+      
+      // Update statistics
+      state.priceUpdateStats.totalUpdates += priceUpdates.length;
+      state.priceUpdateStats.lastUpdateTime = updateTime;
+      state.lastUpdate = updateTime;
+    },
+    setBinanceConnectionStatus: (state, action) => {
+      state.binanceConnectionStatus = action.payload;
+    },
+    addWatchedSymbol: (state, action) => {
+      const symbol = action.payload;
+      if (!state.watchedSymbols.includes(symbol)) {
+        state.watchedSymbols.push(symbol);
+      }
+    },
+    removeWatchedSymbol: (state, action) => {
+      const symbol = action.payload;
+      state.watchedSymbols = state.watchedSymbols.filter(s => s !== symbol);
+    },
+    setWatchedSymbols: (state, action) => {
+      state.watchedSymbols = action.payload;
+    },
+    updatePriceUpdateStats: (state, action) => {
+      state.priceUpdateStats = { ...state.priceUpdateStats, ...action.payload };
+    },
+    clearPriceHistory: (state, action) => {
+      const symbol = action.payload;
+      if (symbol) {
+        delete state.priceHistory[symbol];
+      } else {
+        state.priceHistory = {};
+      }
+    },
   },
 });
 
@@ -100,6 +217,15 @@ export const {
   setAiAnalysis,
   setAiOpportunities,
   addAiOpportunity,
+  // 🔥 NEW: Real-time price actions
+  updateRealTimePrice,
+  batchUpdateRealTimePrices,
+  setBinanceConnectionStatus,
+  addWatchedSymbol,
+  removeWatchedSymbol,
+  setWatchedSymbols,
+  updatePriceUpdateStats,
+  clearPriceHistory,
 } = marketDataSlice.actions;
 
 export default marketDataSlice.reducer;

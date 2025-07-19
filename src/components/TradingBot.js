@@ -108,11 +108,26 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
     }
   }, [isConnected, getBotStatus, getBotConfig]);
 
+  // 🔥 NEW: Sync bot status from global WebSocket data
+  useEffect(() => {
+    if (data.bot_status) {
+      console.log('🔍 TradingBot: Syncing bot status from global WebSocket data:', data.bot_status);
+      setBotStatus(prevStatus => ({
+        ...prevStatus,
+        ...data.bot_status
+      }));
+      setBotEnabled(data.bot_status.enabled || false);
+    }
+  }, [data.bot_status]);
+
   // Request all required data for the trading bot dashboard
   const requestAllData = () => {
     if (!isConnected || !sendMessage) return;
 
     try {
+      // Request bot status first
+      sendMessage({ type: 'get_bot_status' });
+
       // Request positions (active trades)
       sendMessage({ type: 'get_positions' });
 
@@ -130,6 +145,21 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       console.error('🔍 TradingBot: Error requesting data:', error);
     }
   };
+
+  // Real-time data refresh every 2 seconds
+  useEffect(() => {
+    if (!isConnected) return;
+    
+    const interval = setInterval(() => {
+      if (isConnected && sendMessage) {
+        // Request updated bot status and positions
+        sendMessage({ type: 'get_bot_status' });
+        sendMessage({ type: 'get_positions' });
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [isConnected, sendMessage]);
 
   // Global message handler for bot responses
   const handleBotResponse = (message) => {
@@ -426,14 +456,38 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       // Refresh bot status
       getBotStatus();
     } else if (type === 'analysis_log') {
+      // Ensure the data has the required log structure
+      const logEntry = {
+        timestamp: data.timestamp || Date.now() / 1000,
+        symbol: data.symbol || 'Unknown',
+        level: data.level || 'INFO',
+        message: data.message || `Analysis for ${data.symbol}`,
+        source: data.source || 'Analysis Log'
+      };
+      
       setAnalysisLogs(prev => {
-        const newLogs = [data, ...prev.slice(0, 49)];
+        const newLogs = [logEntry, ...prev.slice(0, 49)];
         console.log('🔍 TradingBot: Added analysis log. New logs length:', newLogs.length);
         return newLogs;
       });
     } else if (type === 'trade_log') {
+      // Ensure the data has the required log structure
+      const logEntry = {
+        timestamp: data.timestamp || Date.now() / 1000,
+        symbol: data.symbol || 'Unknown',
+        level: data.level || 'info',
+        message: data.message || `Trade action: ${data.action} for ${data.symbol}`,
+        action: data.action,
+        confidence: data.confidence,
+        trade_decision: data.trade_decision || 'N/A',
+        final_confidence_score: data.confidence,
+        analysis_source: data.source || 'Trade Log',
+        confidence_above_threshold: data.confidence_above_threshold || false,
+        source: 'Trade Log'
+      };
+      
       setTradeLogs(prev => {
-        const newLogs = [data, ...prev.slice(0, 49)];
+        const newLogs = [logEntry, ...prev.slice(0, 49)];
         console.log('🔍 TradingBot: Added trade log. New logs length:', newLogs.length);
         return newLogs;
       });
@@ -662,7 +716,7 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
           <div className="stat-card">
             <div className="stat-icon"><CiWavePulse1/></div>
             <div className="stat-label">Active Trades</div>
-            <div className="stat-value">{activeTrades}</div>
+            <div className="stat-value">{Object.keys(activeTrades).length}</div>
           </div>
           <div className="stat-card">
             <div className="stat-icon"><CiBadgeDollar /></div>
@@ -1079,7 +1133,10 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
                     <div className="log-details">
                       <div className="confidence-info">
                         <span className="confidence-label">Confidence:</span>
-                        <span className="confidence-value">{(log.final_confidence_score * 100).toFixed(2)}%</span>
+                        <span className="confidence-value">
+                          {log.final_confidence_score ? (log.final_confidence_score * 100).toFixed(2) : 
+                           log.confidence ? (log.confidence * 100).toFixed(2) : '0'}%
+                        </span>
                       </div>
                       <div className="decision-info">
                         <span className="decision-label">Decision:</span>

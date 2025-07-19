@@ -1,5 +1,13 @@
 import React from 'react';
 import './PositionsSidebar.css';
+import { FiCircle } from 'react-icons/fi';
+
+// Import Redux hooks for real-time prices
+import { 
+  usePriceBySymbol, 
+  useMultipleSymbolPrices,
+  useBinanceConnectionStatus 
+} from '../store/hooks';
 
 const PositionsSidebar = ({ 
   positions = {}, 
@@ -8,6 +16,13 @@ const PositionsSidebar = ({
   isConnected = false,
   cryptoData = new Map()
 }) => {
+  // 🔥 NEW: Get real-time prices from Redux store for all position symbols
+  const positionSymbols = Object.keys(positions);
+  const reduxPrices = useMultipleSymbolPrices(positionSymbols);
+  const binanceConnectionStatus = useBinanceConnectionStatus();
+  
+  console.log('🔍 PositionsSidebar: Redux prices for positions:', reduxPrices);
+  console.log('🔍 PositionsSidebar: Binance connection status:', binanceConnectionStatus);
   const formatNumber = (num) => {
     if (num === null || num === undefined) return '0.00';
     return parseFloat(num).toLocaleString('en-US', {
@@ -26,17 +41,30 @@ const PositionsSidebar = ({
     return { pnl, pnlPercentage };
   };
 
+  // 🔥 UPDATED: Get current price using Redux store (with fallbacks)
   const getCurrentPrice = (symbol, position) => {
+    // First try Redux real-time price
+    if (reduxPrices[symbol] && reduxPrices[symbol].price) {
+      console.log(`🔍 PositionsSidebar: Using Redux price for ${symbol}:`, reduxPrices[symbol].price);
+      return reduxPrices[symbol].price;
+    }
+    
+    // Fallback to currentPrices prop
     if (currentPrices[symbol]) {
+      console.log(`🔍 PositionsSidebar: Using prop price for ${symbol}:`, currentPrices[symbol].price);
       return currentPrices[symbol].price;
     }
 
+    // Fallback to cryptoData
     for (let [id, crypto] of cryptoData) {
       if (crypto.symbol === symbol) {
+        console.log(`🔍 PositionsSidebar: Using cryptoData price for ${symbol}:`, crypto.current_price);
         return crypto.current_price;
       }
     }
 
+    // Last fallback to entry price
+    console.log(`🔍 PositionsSidebar: Using entry price for ${symbol}:`, position.avg_price || position.entry_price);
     return position.avg_price || position.entry_price;
   };
 
@@ -104,7 +132,14 @@ const PositionsSidebar = ({
                   
                   <div className="position-row">
                     <span className="label">Mark Price:</span>
-                    <span className="value">${formatNumber(currentPrice)}</span>
+                    <span className="value">
+                      ${formatNumber(currentPrice)}
+                      {reduxPrices[symbol] && reduxPrices[symbol].price && (
+                        <span className="real-time-indicator" title="Real-time price from Binance">
+                          <FiCircle style={{color: '#ff4757', fill: '#ff4757'}} size={8} />
+                        </span>
+                      )}
+                    </span>
                   </div>
                   
                   <div className="position-row">

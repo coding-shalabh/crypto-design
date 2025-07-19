@@ -12,6 +12,14 @@ import {
 } from 'react-icons/fi';
 import './TradingPanel.css';
 
+// 🔥 NEW: Import Redux hooks for real-time prices
+import { 
+  usePriceBySymbol, 
+  useEnhancedPrice,
+  useBinanceConnectionStatus,
+  usePriceUpdateStats 
+} from '../store/hooks';
+
 const TradingPanel = ({ 
   isConnected, 
   data, 
@@ -28,6 +36,19 @@ const TradingPanel = ({
     isConnected, 
     data: Object.keys(data || {}).length,
     cryptoData: cryptoData ? cryptoData.size : 0
+  });
+
+  // 🔥 NEW: Use Redux hooks for real-time prices
+  const reduxPrice = usePriceBySymbol(currentSymbol);
+  const enhancedPrice = useEnhancedPrice(currentSymbol);
+  const binanceConnectionStatus = useBinanceConnectionStatus();
+  const priceUpdateStats = usePriceUpdateStats();
+  
+  console.log('🔍 TradingPanel: Redux price data:', { 
+    reduxPrice, 
+    enhancedPrice, 
+    binanceConnectionStatus, 
+    priceUpdateStats 
   });
 
   const [activeTab, setActiveTab] = useState('buy');
@@ -88,20 +109,28 @@ const TradingPanel = ({
     }
   }, [isConnected, cryptoData]);
 
+  // 🔥 UPDATED: Price effect using Redux real-time prices
   useEffect(() => {
     let foundPrice = null;
 
     if (orderType === 'market') {
-      if (currentPrice) {
+      // Use Redux real-time price first
+      if (reduxPrice && reduxPrice.price) {
+        foundPrice = reduxPrice.price;
+        console.log('🔍 TradingPanel: Setting market price from Redux:', foundPrice);
+      } else if (currentPrice) {
         foundPrice = currentPrice;
+        console.log('🔍 TradingPanel: Setting market price from props:', foundPrice);
       } else if (data && data.price_cache && data.price_cache[currentSymbol]) {
         foundPrice = data.price_cache[currentSymbol].price;
+        console.log('🔍 TradingPanel: Setting market price from cache:', foundPrice);
       } else if (cryptoData && cryptoData.size > 0) {
         const crypto = Array.from(cryptoData.values()).find(
           c => c.symbol === currentSymbol
         );
         if (crypto && crypto.current_price) {
           foundPrice = crypto.current_price;
+          console.log('🔍 TradingPanel: Setting market price from cryptoData:', foundPrice);
         }
       }
     } else {
@@ -111,9 +140,9 @@ const TradingPanel = ({
     if (foundPrice && typeof foundPrice === 'number' && !isNaN(foundPrice)) {
       setPrice(foundPrice.toFixed(2));
     }
-  }, [currentSymbol, currentPrice, cryptoData, data, orderType, price]);
+  }, [currentSymbol, currentPrice, cryptoData, data, orderType, price, reduxPrice]);
 
-  // Update slider value when size is manually entered
+  // 🔥 UPDATED: Update slider value when size is manually entered (using Redux price)
   useEffect(() => {
     if (size && parseFloat(size) > 0) {
       const currentPrice = getCurrentPrice();
@@ -136,7 +165,7 @@ const TradingPanel = ({
     } else if (!size) {
       setSizeSliderValue(0);
     }
-  }, [size, sizeUnit, paper_balance, currentPrice, cryptoData, data, currentSymbol]);
+  }, [size, sizeUnit, paper_balance, currentPrice, cryptoData, data, currentSymbol, reduxPrice]);
 
   // Reset slider and size when symbol changes
   useEffect(() => {
@@ -244,6 +273,7 @@ const TradingPanel = ({
     }
   };
 
+  // 🔥 UPDATED: Calculate cost using Redux real-time prices
   const calculateCost = () => {
     if (!size) return 0;
     
@@ -251,7 +281,10 @@ const TradingPanel = ({
     let effectivePrice = null;
     
     if (orderType === 'market') {
-      if (currentPrice) {
+      // Use Redux real-time price first
+      if (reduxPrice && reduxPrice.price) {
+        effectivePrice = reduxPrice.price;
+      } else if (currentPrice) {
         effectivePrice = currentPrice;
       } else if (price && parseFloat(price) > 0) {
         effectivePrice = parseFloat(price);
@@ -353,26 +386,47 @@ const TradingPanel = ({
     }
   };
 
-  // Get current price from multiple sources
+  // 🔥 UPDATED: Get current price using Redux store (with fallbacks)
   const getCurrentPrice = () => {
-    if (currentPrice) return currentPrice;
+    // First try Redux real-time price
+    if (reduxPrice && reduxPrice.price) {
+      console.log('🔍 TradingPanel: Using Redux real-time price:', reduxPrice.price);
+      return reduxPrice.price;
+    }
+    
+    // Fallback to prop-based currentPrice
+    if (currentPrice) {
+      console.log('🔍 TradingPanel: Using prop currentPrice:', currentPrice);
+      return currentPrice;
+    }
+    
+    // Fallback to data price cache
     if (data && data.price_cache && data.price_cache[currentSymbol]) {
+      console.log('🔍 TradingPanel: Using data price cache:', data.price_cache[currentSymbol].price);
       return data.price_cache[currentSymbol].price;
     }
+    
+    // Try base symbol in price cache
     if (data && data.price_cache) {
       const baseSymbol = currentSymbol.replace('USDT', '');
       if (data.price_cache[baseSymbol]) {
+        console.log('🔍 TradingPanel: Using base symbol price cache:', data.price_cache[baseSymbol].price);
         return data.price_cache[baseSymbol].price;
       }
     }
+    
+    // Last fallback to cryptoData
     if (cryptoData && cryptoData.size > 0) {
       const crypto = Array.from(cryptoData.values()).find(
         c => c.symbol === currentSymbol
       );
       if (crypto && crypto.current_price) {
+        console.log('🔍 TradingPanel: Using cryptoData price:', crypto.current_price);
         return crypto.current_price;
       }
     }
+    
+    console.log('🔍 TradingPanel: No price found for symbol:', currentSymbol);
     return null;
   };
 
@@ -574,39 +628,53 @@ const TradingPanel = ({
 
       {/* Trading Form */}
       <form onSubmit={handleSubmit} className="trading-form">
-        {/* Price Input */}
-        <div className="form-group">
-          <label className="form-label">
-            Price {orderType === 'market' && <span className="market-indicator">(Market Price)</span>}
-          </label>
-          <div className="input-group">
-            <input
-              type="number"
-              value={orderType === 'market' ? '' : price}
-              onChange={(e) => setPrice(e.target.value)}
-              placeholder={orderType === 'market' ? 'Market' : '0.00'}
-              className={`form-input ${orderType === 'market' ? 'disabled' : ''}`}
-              step="0.01"
-              min="0"
-              disabled={orderType === 'market'}
-            />
-            <span className="input-suffix">USDT</span>
+        {/* Price Input - Hidden for market orders */}
+        {orderType !== 'market' && (
+          <div className="form-group">
+            <label className="form-label">
+              Price
+            </label>
+            <div className="input-group">
+              <input
+                type="number"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="0.00"
+                className="form-input"
+                step="0.01"
+                min="0"
+              />
+              <span className="input-suffix">USDT</span>
+            </div>
           </div>
-          {orderType === 'market' && (
-            <div className="market-price-info">
-              <span className="current-price-label">Current Market Price:</span>
+        )}
+
+        {/* Market Price Display - Only for market orders */}
+        {orderType === 'market' && (
+          <div className="form-group">
+            <label className="form-label">
+              <span className="market-indicator">Market Price</span>
+            </label>
+            <div className="market-price-display">
               <span className="current-price-value">
                 ${(() => {
-                  // Get real-time current price from multiple sources
+                  // Use Redux real-time price first
+                  if (reduxPrice && reduxPrice.price && typeof reduxPrice.price === 'number' && !isNaN(reduxPrice.price)) {
+                    return reduxPrice.price.toFixed(2);
+                  }
+                  
+                  // Fallback to prop-based price
                   if (currentPrice && typeof currentPrice === 'number' && !isNaN(currentPrice)) {
                     return currentPrice.toFixed(2);
                   }
+                  
                   if (data && data.price_cache && data.price_cache[currentSymbol]) {
                     const price = data.price_cache[currentSymbol].price;
                     if (typeof price === 'number' && !isNaN(price)) {
                       return price.toFixed(2);
                     }
                   }
+                  
                   if (data && data.price_cache) {
                     const baseSymbol = currentSymbol.replace('USDT', '');
                     if (data.price_cache[baseSymbol]) {
@@ -616,6 +684,7 @@ const TradingPanel = ({
                       }
                     }
                   }
+                  
                   if (cryptoData && cryptoData.size > 0) {
                     const crypto = Array.from(cryptoData.values()).find(
                       c => c.symbol === currentSymbol
@@ -624,17 +693,14 @@ const TradingPanel = ({
                       return crypto.current_price.toFixed(2);
                     }
                   }
-                  return 'Loading...';
+                  
+                  return binanceConnectionStatus === 'connected' ? 'Loading...' : 'Connecting...';
                 })()}
               </span>
+              <span className="market-price-label">USDT</span>
             </div>
-          )}
-          {orderType === 'market' && !currentPrice && !price && (
-            <div className="market-price-info loading">
-              <span className="current-price-label">Loading price...</span>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Size Input */}
         <div className="form-group">
