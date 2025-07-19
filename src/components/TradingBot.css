@@ -927,3 +927,8 @@
   border-left: 4px solid #28a745;
   background: rgba(40, 167, 69, 0.1);
 }
+
+.history-table .table-body {
+  max-height: 50vh;
+  overflow-y: auto;
+} 

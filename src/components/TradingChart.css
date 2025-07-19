@@ -340,3 +340,8 @@
 .stat-icon * {
   font-size: 20px;
 }
+
+.history-table .table-body {
+  max-height: 50vh;
+  overflow-y: auto;
+} 

@@ -73,7 +73,7 @@ export const WebSocketProvider = ({ children }) => {
       setConnectionStatus('connecting');
       
       // 🔧 FIXED: Create WebSocket with proper URL
-      const wsUrl = process.env.REACT_APP_WS_URL || 'ws://localhost:8767';
+      const wsUrl = process.env.REACT_APP_WS_URL || 'ws://localhost:8768';
       console.log('🔍 WebSocketProvider: Connecting to:', wsUrl);
       
       const newSocket = new WebSocket(wsUrl);
@@ -554,6 +554,14 @@ export const WebSocketProvider = ({ children }) => {
       if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
         sendMessage({ type: 'update_bot_config', config });
         return { success: true, message: 'Bot config update request sent' };
+      } else {
+        throw new Error('WebSocket not connected');
+      }
+    },
+    getBotConfig: async () => {
+      if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+        sendMessage({ type: 'get_bot_config' });
+        return { success: true, message: 'Bot config request sent' };
       } else {
         throw new Error('WebSocket not connected');
       }

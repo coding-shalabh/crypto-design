@@ -1,4 +1,3 @@
-import React, { useState, useEffect } from 'react';
 import { 
   FiPlay, 
   FiSquare, 
@@ -23,12 +22,14 @@ import { CiWallet } from 'react-icons/ci';
 import { MdCandlestickChart } from 'react-icons/md';
 import { toast } from 'react-toastify';
 import { GrTarget } from 'react-icons/gr';
+import { useState, useEffect } from 'react';
 
-const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotConfig, sendMessage, data }) => {
-  console.log('🔍 TradingBot: Component initialized with props:', { isConnected, startBot: !!startBot, stopBot: !!stopBot, getBotStatus: !!getBotStatus, updateBotConfig: !!updateBotConfig });
+const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotConfig, getBotConfig, sendMessage, data }) => {
+  console.log('🔍 TradingBot: Component initialized with props:', { isConnected, startBot: !!startBot, stopBot: !!stopBot, getBotStatus: !!getBotStatus, updateBotConfig: !!updateBotConfig, getBotConfig: !!getBotConfig });
   
   // Get WebSocket context for real-time updates
   const { lastMessage } = useWebSocket();
+
   
   const [botEnabled, setBotEnabled] = useState(false);
   console.log('🔍 TradingBot: Initial botEnabled state:', botEnabled);
@@ -97,14 +98,15 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
   useEffect(() => {
     console.log('🔍 TradingBot: useEffect triggered - isConnected:', isConnected);
     if (isConnected) {
-      console.log('🔍 TradingBot: Connection detected, calling getBotStatus');
+      console.log('🔍 TradingBot: Connection detected, calling getBotStatus and getBotConfig');
       getBotStatus();
+      getBotConfig(); // Load saved configuration
       // Request additional data for all sections
       requestAllData();
     } else {
       console.log('🔍 TradingBot: No connection detected');
     }
-  }, [isConnected, getBotStatus]);
+  }, [isConnected, getBotStatus, getBotConfig]);
 
   // Request all required data for the trading bot dashboard
   const requestAllData = () => {
@@ -140,6 +142,29 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       console.log('🔍 TradingBot: Processing bot_status_response:', data);
       setBotStatus(data);
       setBotEnabled(data.enabled);
+      
+      // Convert active_trades array to object with symbol keys
+      if (data.active_trades && Array.isArray(data.active_trades)) {
+        const activeTradesObject = {};
+        data.active_trades.forEach(trade => {
+          if (trade.symbol) {
+            activeTradesObject[trade.symbol] = {
+              symbol: trade.symbol,
+              amount: trade.amount || 0,
+              entry_price: trade.entry_price || 0,
+              current_price: trade.entry_price || 0, // Use entry_price as current_price if not provided
+              unrealized_pnl: 0, // Will be calculated from positions data
+              direction: trade.action === 'BUY' ? 'long' : 'short',
+              margin_used: trade.amount || 0,
+              trade_value: trade.amount || 0,
+              confidence_score: trade.confidence || 0
+            };
+          }
+        });
+        setActiveTrades(activeTradesObject);
+        console.log('🔍 TradingBot: Converted active_trades array to object:', activeTradesObject);
+      }
+      
       console.log('🔍 TradingBot: Updated botStatus to:', data);
       console.log('🔍 TradingBot: Updated botEnabled to:', data.enabled);
     } else if (type === 'start_bot_response') {
@@ -172,6 +197,12 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
         getBotStatus();
       } else {
         console.log('🔍 TradingBot: Config update failed:', data.error);
+      }
+    } else if (type === 'bot_config_response') {
+      console.log('🔍 TradingBot: Processing bot_config_response:', data);
+      if (data.success && data.config) {
+        console.log('🔍 TradingBot: Loading saved bot configuration:', data.config);
+        setBotConfig(data.config);
       }
     } else if (type === 'bot_status_update') {
       console.log('🔍 TradingBot: Processing bot_status_update:', data);
@@ -769,46 +800,65 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
 
         {positionEntries.length > 0 ? (
           <div className="trades-grid">
-            {positionEntries.map(([symbol, position]) => (
-              <div key={symbol} className="trade-card">
-                <div className="trade-header">
-                  <h4>{symbol}</h4>
-                  <span className={`direction-badge ${position.direction?.toLowerCase() || 'long'}`}>
-                    {position.direction === 'long' ? '📈' : '📉'} {(position.direction || 'LONG').toUpperCase()}
-                  </span>
-                </div>
-                <div className="trade-details">
-                  <div className="detail-row">
-                    <span>Entry Price:</span>
-                    <span>${(position.entry_price || position.price || 0).toFixed(2)}</span>
-                  </div>
-                  <div className="detail-row">
-                    <span>Current Price:</span>
-                    <span>${(position.current_price || position.price || 0).toFixed(2)}</span>
-                  </div>
-                  <div className="detail-row">
-                    <span>Amount:</span>
-                    <span>{(position.amount).toFixed(2) || 0}</span>
-                  </div>
-                  <div className="detail-row">
-                    <span>Unrealized PnL:</span>
-                    <span className={position.unrealized_pnl >= 0 ? 'profit' : 'loss'}>
-                      ${(position.unrealized_pnl || 0).toFixed(2)}
+            {positionEntries.map(([symbol, position]) => {
+              // Ensure position is an object and extract values safely
+              if (!position || typeof position !== 'object') {
+                console.warn('Invalid position data for symbol:', symbol, position);
+                return null;
+              }
+
+              // Safely extract values with proper type checking
+              const entryPrice = typeof position.entry_price === 'number' ? position.entry_price : 
+                                typeof position.price === 'number' ? position.price : 0;
+              const currentPrice = typeof position.current_price === 'number' ? position.current_price : 
+                                  typeof position.price === 'number' ? position.price : 0;
+              const amount = typeof position.amount === 'number' ? position.amount : 0;
+              const unrealizedPnl = typeof position.unrealized_pnl === 'number' ? position.unrealized_pnl : 0;
+              const marginUsed = typeof position.margin_used === 'number' ? position.margin_used : 0;
+              const confidenceScore = typeof position.confidence_score === 'number' ? position.confidence_score : null;
+              const direction = typeof position.direction === 'string' ? position.direction : 'long';
+
+              return (
+                <div key={symbol} className="trade-card">
+                  <div className="trade-header">
+                    <h4>{symbol}</h4>
+                    <span className={`direction-badge ${direction.toLowerCase()}`}>
+                      {direction === 'long' ? '📈' : '📉'} {direction.toUpperCase()}
                     </span>
                   </div>
-                  <div className="detail-row">
-                    <span>Margin Used:</span>
-                    <span>${(position.margin_used || 0).toFixed(2)}</span>
-                  </div>
-                  {position.confidence_score && (
+                  <div className="trade-details">
                     <div className="detail-row">
-                      <span>Confidence:</span>
-                      <span>{(position.confidence_score * 100).toFixed(1)}%</span>
+                      <span>Entry Price:</span>
+                      <span>${entryPrice.toFixed(2)}</span>
                     </div>
-                  )}
+                    <div className="detail-row">
+                      <span>Current Price:</span>
+                      <span>${currentPrice.toFixed(2)}</span>
+                    </div>
+                    <div className="detail-row">
+                      <span>Amount:</span>
+                      <span>{amount.toFixed(2)}</span>
+                    </div>
+                    <div className="detail-row">
+                      <span>Unrealized PnL:</span>
+                      <span className={unrealizedPnl >= 0 ? 'profit' : 'loss'}>
+                        ${unrealizedPnl.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="detail-row">
+                      <span>Margin Used:</span>
+                      <span>${marginUsed.toFixed(2)}</span>
+                    </div>
+                    {confidenceScore !== null && (
+                      <div className="detail-row">
+                        <span>Confidence:</span>
+                        <span>{(confidenceScore * 100).toFixed(1)}%</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="no-trades">
@@ -928,6 +978,7 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
               <span>PnL</span>
               <span>Time</span>
             </div>
+            <div className="table-body">
             {tradeHistory.map((trade, index) => (
               <div key={index} className="table-row">
                 <span>{trade.symbol}</span>
@@ -942,6 +993,7 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
                 <span>{formatTimeAgo(trade.timestamp)}</span>
               </div>
             ))}
+            </div>
           </div>
         ) : (
           <div className="no-history">

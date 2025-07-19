@@ -183,6 +183,10 @@ class TradingBot:
             logger.error(f" Error updating bot config: {e}")
             return {'success': False, 'message': f'Error updating config: {e}'}
     
+    def get_bot_config(self) -> Dict:
+        """Get current bot configuration"""
+        return self.bot_config.copy()
+    
     async def check_bot_trading_conditions(self, symbol: str, analysis: Dict) -> bool:
         """Check if trading conditions are met for bot trading"""
         try:

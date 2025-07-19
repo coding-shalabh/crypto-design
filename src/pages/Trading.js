@@ -54,6 +54,7 @@ const Trading = () => {
     stopBot,
     getBotStatus,
     updateBotConfig,
+    getBotConfig,
     getPositions,
     closePosition,
     sendMessage
@@ -66,6 +67,7 @@ const Trading = () => {
     stopBot: !!stopBot,
     getBotStatus: !!getBotStatus,
     updateBotConfig: !!updateBotConfig,
+    getBotConfig: !!getBotConfig,
     getPositions: !!getPositions,
     closePosition: !!closePosition,
     sendMessage: !!sendMessage
@@ -790,6 +792,7 @@ const Trading = () => {
               stopBot={stopBot}
               getBotStatus={getBotStatus}
               updateBotConfig={updateBotConfig}
+              getBotConfig={getBotConfig}
               sendMessage={sendMessage}
               data={data}
             />

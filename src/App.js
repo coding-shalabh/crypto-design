@@ -4,6 +4,10 @@ import './App.css';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
+// Import Redux store and provider
+import { Provider } from 'react-redux';
+import { store } from './store/store';
+
 // Import WebSocket context
 import { WebSocketProvider } from './contexts/WebSocketContext';
 
@@ -11,6 +15,8 @@ import { WebSocketProvider } from './contexts/WebSocketContext';
 import Dashboard from './pages/Dashboard';
 import Trading from './pages/Trading';
 import Analytics from './pages/Analytics';
+import Portfolio from './pages/Portfolio';
+import News from './pages/News';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 
@@ -44,35 +50,38 @@ function App() {
   if (!isAuthenticated) {
     console.log('🔍 App: User not authenticated, redirecting to login');
     return (
-      <WebSocketProvider>
-        <Router>
-          <div className="App">
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="*" element={<Navigate to="/login" replace />} />
-            </Routes>
-            <ToastContainer 
-              position="top-right"
-              autoClose={3000}
-              hideProgressBar={false}
-              newestOnTop={false}
-              closeOnClick
-              rtl={false}
-              pauseOnFocusLoss
-              draggable
-              pauseOnHover
-            />
-          </div>
-        </Router>
-      </WebSocketProvider>
+      <Provider store={store}>
+        <WebSocketProvider>
+          <Router>
+            <div className="App">
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="*" element={<Navigate to="/login" replace />} />
+              </Routes>
+              <ToastContainer 
+                position="top-right"
+                autoClose={3000}
+                hideProgressBar={false}
+                newestOnTop={false}
+                closeOnClick
+                rtl={false}
+                pauseOnFocusLoss
+                draggable
+                pauseOnHover
+              />
+            </div>
+          </Router>
+        </WebSocketProvider>
+      </Provider>
     );
   }
 
   console.log('🔍 App: User authenticated, rendering main application');
   
   return (
-    <WebSocketProvider>
-      <Router>
+    <Provider store={store}>
+      <WebSocketProvider>
+        <Router>
         <div className="App">
           <Sidebar />
           <div className="main-content">
@@ -97,11 +106,38 @@ function App() {
                 } 
               />
               <Route 
+                path="/portfolio" 
+                element={
+                  <React.Fragment>
+                    {console.log('🔍 App: Rendering Portfolio route')}
+                    <Portfolio />
+                  </React.Fragment>
+                } 
+              />
+              <Route 
+                path="/charts" 
+                element={
+                  <React.Fragment>
+                    {console.log('🔍 App: Rendering Charts route (redirecting to Trading)')}
+                    <Trading />
+                  </React.Fragment>
+                } 
+              />
+              <Route 
                 path="/analytics" 
                 element={
                   <React.Fragment>
                     {console.log('🔍 App: Rendering Analytics route')}
                     <Analytics />
+                  </React.Fragment>
+                } 
+              />
+              <Route 
+                path="/news" 
+                element={
+                  <React.Fragment>
+                    {console.log('🔍 App: Rendering News route')}
+                    <News />
                   </React.Fragment>
                 } 
               />
@@ -139,6 +175,7 @@ function App() {
         />
       </Router>
     </WebSocketProvider>
+  </Provider>
   );
 }
 

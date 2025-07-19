@@ -14,7 +14,8 @@
       "Bash(start python dummy_analysis_server.py)",
       "Bash(curl:*)",
       "Bash(set API_MODE=fake)",
-      "Bash(set PORT=8768)"
+      "Bash(set PORT=8768)",
+      "Bash(npm install:*)"
     ],
     "deny": []
   }

@@ -549,8 +549,18 @@ class TradingServer:
                 new_config = data.get('config', {})
                 result = await self.trading_bot.update_bot_config(new_config)
                 await self.safe_send(websocket, {
-                    'type': 'bot_config_update_response',
+                    'type': 'update_bot_config_response',
                     'data': result
+                })
+                
+            elif message_type == 'get_bot_config':
+                bot_config = self.trading_bot.get_bot_config()
+                await self.safe_send(websocket, {
+                    'type': 'bot_config_response',
+                    'data': {
+                        'success': True,
+                        'config': bot_config
+                    }
                 })
                 
             elif message_type == 'close_position':
@@ -1872,7 +1882,7 @@ class TradingServer:
     
     async def high_frequency_autoclose_monitoring(self):
         """High-frequency monitoring for auto-close conditions (every 15 seconds)"""
-        logger.info("🎯 Starting high-frequency auto-close monitoring (every 15 seconds)")
+        logger.info("Starting high-frequency auto-close monitoring (every 15 seconds)")
         
         while self._server_running:
             try:
