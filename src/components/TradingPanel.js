@@ -61,6 +61,7 @@ const TradingPanel = ({
 
   // Safely destructure data with defaults
   const { paper_balance = 0, positions = {}, recent_trades = [] } = data || {};
+  console.log('🔍 TradingPanel: Current data structure:', { paper_balance, positions, recent_trades: recent_trades.length });
   console.log('🔍 TradingPanel: Data from props:', { 
     paper_balance, 
     positions: Object.keys(positions).length, 
@@ -87,130 +88,30 @@ const TradingPanel = ({
     }
   }, [isConnected, cryptoData]);
 
-  // Debug log when currentPrice changes
   useEffect(() => {
-    console.log(`🔍 TradingPanel: currentPrice updated for ${currentSymbol}:`, currentPrice);
-  }, [currentPrice, currentSymbol]);
+    let foundPrice = null;
 
-  // Debug log when crypto data changes
-  useEffect(() => {
-    if (cryptoData && cryptoData.size > 0) {
-      // Try to find crypto data for current symbol (both formats)
-      let crypto = Array.from(cryptoData.values()).find(
-        c => c.symbol === currentSymbol
-      );
-      
-      // If not found, try base symbol (BTC for BTCUSDT)
-      if (!crypto) {
-        const baseSymbol = currentSymbol.replace('USDT', '');
-        crypto = Array.from(cryptoData.values()).find(
-          c => c.symbol === baseSymbol
+    if (orderType === 'market') {
+      if (currentPrice) {
+        foundPrice = currentPrice;
+      } else if (data && data.price_cache && data.price_cache[currentSymbol]) {
+        foundPrice = data.price_cache[currentSymbol].price;
+      } else if (cryptoData && cryptoData.size > 0) {
+        const crypto = Array.from(cryptoData.values()).find(
+          c => c.symbol === currentSymbol
         );
-      }
-      
-      console.log(`🔍 TradingPanel: Crypto data for ${currentSymbol}:`, crypto);
-      console.log(`🔍 TradingPanel: Total crypto data entries:`, cryptoData.size);
-      console.log(`🔍 TradingPanel: Available symbols:`, Array.from(cryptoData.values()).map(c => c.symbol).slice(0, 10));
-      
-      // If we found crypto data, use it to set the price
-      if (crypto && crypto.current_price && !currentPrice) {
-        console.log(`🔍 TradingPanel: Setting price from crypto data: ${crypto.current_price}`);
-        // We can't directly set currentPrice here, but we can update the price field
-        if (!price) {
-          setPrice(crypto.current_price.toFixed(2));
+        if (crypto && crypto.current_price) {
+          foundPrice = crypto.current_price;
         }
       }
     } else {
-      console.log(`🔍 TradingPanel: No crypto data available for ${currentSymbol}`);
+      foundPrice = price ? parseFloat(price) : null;
     }
-  }, [cryptoData, currentSymbol, currentPrice, price]);
 
-  // Debug log when positions change
-  useEffect(() => {
-    console.log('🔍 TradingPanel: Positions updated:', positions);
-    console.log('🔍 TradingPanel: Current positions count:', Object.keys(positions || {}).length);
-    if (positions && Object.keys(positions).length > 0) {
-      console.log('🔍 TradingPanel: Available positions:', Object.keys(positions));
-    }
-  }, [positions]);
-
-  // Set default price to current price when it changes
-  useEffect(() => {
-    if (currentPrice && typeof currentPrice === 'number' && !isNaN(currentPrice) && !price) {
-      setPrice(currentPrice.toFixed(2));
-      console.log('🔍 TradingPanel: Setting initial price from currentPrice:', currentPrice.toFixed(2));
-    }
-  }, [currentPrice, price]);
-
-  // Update price field when currentPrice changes (for market orders)
-  useEffect(() => {
-    if (orderType === 'market' && currentPrice && typeof currentPrice === 'number' && !isNaN(currentPrice)) {
-      setPrice(currentPrice.toFixed(2));
-      console.log('🔍 TradingPanel: Updating price field for market order:', currentPrice.toFixed(2));
-    }
-  }, [currentPrice, orderType]);
-
-  // Additional effect to ensure price is set when component mounts or symbol changes
-  useEffect(() => {
-    if (currentPrice && typeof currentPrice === 'number' && !isNaN(currentPrice)) {
-      setPrice(currentPrice.toFixed(2));
-      console.log('🔍 TradingPanel: Price updated due to currentPrice change:', currentPrice.toFixed(2));
-    }
-  }, [currentPrice]);
-
-  // Set price from crypto data when currentPrice is null but crypto data is available
-  useEffect(() => {
-    if (!currentPrice && cryptoData && cryptoData.size > 0) {
-      const crypto = Array.from(cryptoData.values()).find(
-        c => c.symbol === currentSymbol
-      );
-      if (crypto && crypto.current_price) {
-        setPrice(crypto.current_price.toFixed(2));
-        console.log('🔍 TradingPanel: Setting price from crypto data:', crypto.current_price.toFixed(2));
-      }
-    }
-  }, [currentPrice, cryptoData, currentSymbol]);
-
-  // Force set price when component mounts or symbol changes, regardless of currentPrice
-  useEffect(() => {
-    // Always try to set a price when the component mounts or symbol changes
-    let foundPrice = null;
-    
-    // First try currentPrice
-    if (currentPrice) {
-      foundPrice = currentPrice;
-      console.log('🔍 TradingPanel: Using currentPrice for initial price:', foundPrice);
-    }
-    // Then try crypto data
-    else if (cryptoData && cryptoData.size > 0) {
-      const crypto = Array.from(cryptoData.values()).find(
-        c => c.symbol === currentSymbol
-      );
-      if (crypto && crypto.current_price) {
-        foundPrice = crypto.current_price;
-        console.log('🔍 TradingPanel: Using crypto data for initial price:', foundPrice);
-      }
-    }
-    // Then try WebSocket price cache with full symbol
-    else if (data && data.price_cache && data.price_cache[currentSymbol]) {
-      foundPrice = data.price_cache[currentSymbol].price;
-      console.log('🔍 TradingPanel: Using WebSocket price cache for initial price:', foundPrice);
-    }
-    // Finally try WebSocket price cache with base symbol
-    else if (data && data.price_cache) {
-      const baseSymbol = currentSymbol.replace('USDT', '');
-      if (data.price_cache[baseSymbol]) {
-        foundPrice = data.price_cache[baseSymbol].price;
-        console.log('🔍 TradingPanel: Using base symbol price cache for initial price:', baseSymbol, foundPrice);
-      }
-    }
-    
-    // Set the price if we found one
-    if (foundPrice && !price && typeof foundPrice === 'number' && !isNaN(foundPrice)) {
+    if (foundPrice && typeof foundPrice === 'number' && !isNaN(foundPrice)) {
       setPrice(foundPrice.toFixed(2));
-      console.log('🔍 TradingPanel: Setting initial price from available data:', foundPrice.toFixed(2));
     }
-  }, [currentSymbol, currentPrice, cryptoData, data, price]);
+  }, [currentSymbol, currentPrice, cryptoData, data, orderType, price]);
 
   // Update slider value when size is manually entered
   useEffect(() => {
@@ -246,162 +147,49 @@ const TradingPanel = ({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    console.log('🔍 TradingPanel: Trade form submitted:', { isConnected, size, price, currentPrice, currentSymbol, orderType });
-    
-    if (!isConnected || !size) {
-      console.log('🔍 TradingPanel: Trade validation failed:', { isConnected, size });
+
+    if (!isConnected || !size || isExecuting) {
       return;
     }
 
-    // Prevent duplicate submissions
-    if (isExecuting) {
-      console.log('🔍 TradingPanel: Trade already executing, ignoring duplicate submission');
-      return;
-    }
-
-    // Validate trade amount
     const tradeAmount = parseFloat(size);
     if (tradeAmount <= 0) {
       window.alert('Trade amount must be greater than 0');
       return;
     }
 
-    // Calculate trade value and validate against balance
     let effectivePrice = null;
-    
     if (orderType === 'market') {
-      // For market orders, try to get current price from multiple sources
-      if (currentPrice) {
-        effectivePrice = currentPrice;
-        console.log('🔍 TradingPanel: Using currentPrice prop for market order:', effectivePrice);
-      }
-      // Then try WebSocket price cache with full symbol
-      else if (data && data.price_cache && data.price_cache[currentSymbol]) {
-        effectivePrice = data.price_cache[currentSymbol].price;
-        console.log('🔍 TradingPanel: Using WebSocket price cache (full symbol) for market order:', effectivePrice);
-      }
-      // Then try WebSocket price cache with base symbol
-      else if (data && data.price_cache) {
-        const baseSymbol = currentSymbol.replace('USDT', '');
-        if (data.price_cache[baseSymbol]) {
-          effectivePrice = data.price_cache[baseSymbol].price;
-          console.log('🔍 TradingPanel: Using WebSocket price cache (base symbol) for market order:', baseSymbol, effectivePrice);
-        }
-      }
-      // Then try crypto data
-      else if (cryptoData && cryptoData.size > 0) {
-        const crypto = Array.from(cryptoData.values()).find(
-          c => c.symbol === currentSymbol
-        );
-        if (crypto && crypto.current_price) {
-          effectivePrice = crypto.current_price;
-          console.log('🔍 TradingPanel: Using crypto data fallback for market order:', effectivePrice);
-        }
-      }
-      
-      // Final fallback: try to get from WebSocket data
-      if (!effectivePrice && data && data.price_cache && data.price_cache[currentSymbol]) {
-        effectivePrice = data.price_cache[currentSymbol].price;
-        console.log('🔍 TradingPanel: Using WebSocket price cache fallback for market order:', effectivePrice);
-      }
-      
-      // Additional fallback: try base symbol (BTC instead of BTCUSDT)
-      if (!effectivePrice && data && data.price_cache) {
-        const baseSymbol = currentSymbol.replace('USDT', '');
-        if (data.price_cache[baseSymbol]) {
-          effectivePrice = data.price_cache[baseSymbol].price;
-          console.log('🔍 TradingPanel: Using base symbol fallback for market order:', baseSymbol, effectivePrice);
-        }
-      }
-      
-      // Debug: show what's in the price cache
-      if (data && data.price_cache) {
-        console.log('🔍 TradingPanel: Price cache contents:', data.price_cache);
-        console.log('🔍 TradingPanel: Looking for symbol:', currentSymbol);
-        console.log('🔍 TradingPanel: Available symbols in price cache:', Object.keys(data.price_cache));
-      }
-      
-      if (!effectivePrice) {
-        console.log('🔍 TradingPanel: Market order requires current price - no price available from any source');
-        console.log('🔍 TradingPanel: Available data:', { 
-          currentPrice, 
-          price, 
-          cryptoDataSize: cryptoData ? cryptoData.size : 0,
-          priceCacheKeys: data && data.price_cache ? Object.keys(data.price_cache) : [],
-          currentSymbol 
-        });
-        return;
-      }
+      effectivePrice = getCurrentPrice();
     } else {
-      // For limit orders, ensure we have price
-      if (!price) {
-        console.log('🔍 TradingPanel: Limit order requires price');
-        return;
-      }
       effectivePrice = parseFloat(price);
     }
 
-    // Calculate trade value and validate
-    let tradeValue;
-    let finalTradeAmount;
-    
-    if (sizeUnit === 'USDT') {
-      // Size is already in USDT
-      tradeValue = tradeAmount;
-      finalTradeAmount = tradeValue / effectivePrice; // Convert to crypto amount for backend
-    } else {
-      // Size is in crypto amount
-      finalTradeAmount = tradeAmount; // Keep as crypto amount
-      tradeValue = finalTradeAmount * effectivePrice; // Calculate USDT value
-    }
-    
-    const availableBalance = paper_balance || 100000; // Default to $100k if not available
-    
-    // Check if trade value exceeds balance
-    if (activeTab === 'buy' && tradeValue > availableBalance) {
-      const maxAmount = availableBalance / effectivePrice;
-      const maxUSDT = availableBalance;
-      const maxCrypto = maxAmount;
-      
-      let errorMessage = `Insufficient balance!\n\nYou have $${availableBalance.toLocaleString()} available.\n`;
-      
-      if (sizeUnit === 'USDT') {
-        errorMessage += `Maximum USDT you can spend: $${maxUSDT.toLocaleString()}\n`;
-      } else {
-        errorMessage += `Maximum ${currentSymbol.replace('USDT', '')} you can buy: ${maxCrypto.toFixed(4)}\n`;
-      }
-      
-      window.alert(errorMessage);
+    if (!effectivePrice) {
+      window.alert('Could not determine price for trade.');
       return;
     }
 
-    // Warn about very large trades (more than 50% of balance)
-    if (tradeValue > availableBalance * 0.5) {
-      const confirmLarge = window.confirm(
-        `Large trade detected!\n\n` +
-        `Trade value: $${tradeValue.toLocaleString()}\n` +
-        `Available balance: $${availableBalance.toLocaleString()}\n` +
-        `This trade uses ${((tradeValue / availableBalance) * 100).toFixed(1)}% of your balance.\n\n` +
-        `Are you sure you want to proceed?`
-      );
-      if (!confirmLarge) {
-        return;
-      }
+    let tradeValue;
+    let finalTradeAmount;
+
+    if (sizeUnit === 'USDT') {
+      tradeValue = tradeAmount;
+      finalTradeAmount = tradeValue / effectivePrice;
+    } else {
+      finalTradeAmount = tradeAmount;
+      tradeValue = finalTradeAmount * effectivePrice;
     }
 
-    // Generate a unique trade ID to prevent duplicates
-    const tradeId = `${currentSymbol}-${orderType}-${Date.now()}-${Math.random()}`;
-    
-    // Check if this is a duplicate of the last trade
-    if (lastTradeId === tradeId) {
-      console.log('🔍 TradingPanel: Duplicate trade detected, ignoring');
+    const availableBalance = paper_balance || 100000;
+
+    if (activeTab === 'buy' && tradeValue > availableBalance) {
+      window.alert('Insufficient balance!');
       return;
     }
 
     setIsExecuting(true);
-    setLastTradeId(tradeId);
-    
+
     try {
       const tradeData = {
         symbol: currentSymbol,
@@ -411,43 +199,36 @@ const TradingPanel = ({
         price: effectivePrice,
         strategy: 'manual',
         ai_confidence: 0.0,
-        trade_id: tradeId, // Add trade ID to prevent duplicates
-        trade_type: activeTab === 'buy' ? 'LONG' : 'SHORT', // Set correct trade type
-        margin_mode: marginMode, // Add margin mode to trade data
-        leverage: leverage // Add leverage to trade data
+        trade_id: `${currentSymbol}-${orderType}-${Date.now()}`,
+        trade_type: activeTab === 'buy' ? 'LONG' : 'SHORT',
+        margin_mode: marginMode,
+        leverage: leverage,
       };
 
-      console.log('🔍 TradingPanel: Executing paper trade with data:', tradeData);
       await executePaperTrade(tradeData);
-      
-      // Refresh positions after trade execution
+
       setTimeout(() => {
         if (isConnected) {
-          console.log('🔍 TradingPanel: Refreshing positions after trade execution');
           getPositions();
         }
       }, 1000);
-      
-      // Reset form
+
       setSize('');
       setPrice('');
-      
-      // Show success message
+
       setLastTrade({
         symbol: currentSymbol,
         direction: activeTab,
         amount: finalTradeAmount,
         price: effectivePrice,
-        timestamp: new Date()
+        timestamp: new Date(),
       });
-      
-      // Clear success message after 5 seconds
+
       setTimeout(() => {
         setLastTrade(null);
       }, 5000);
-      
     } catch (error) {
-      console.error('🔍 TradingPanel: Trade execution failed:', error);
+      console.error('Trade execution failed:', error);
     } finally {
       setIsExecuting(false);
     }

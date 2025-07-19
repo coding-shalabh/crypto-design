@@ -19,36 +19,25 @@ const PositionsSidebar = ({
   const calculatePnL = (position, currentPrice) => {
     const entryPrice = position.avg_price || position.entry_price;
     if (!currentPrice || !entryPrice) return { pnl: 0, pnlPercentage: 0 };
-    
-    let pnl, pnlPercentage;
-    
-    if (position.direction === 'long') {
-      // For long positions: profit when price goes up
-      pnl = (currentPrice - entryPrice) * position.amount;
-      pnlPercentage = ((currentPrice - entryPrice) / entryPrice) * 100;
-    } else {
-      // For short positions: profit when price goes down
-      pnl = (entryPrice - currentPrice) * position.amount;
-      pnlPercentage = ((entryPrice - currentPrice) / entryPrice) * 100;
-    }
-    
+
+    const pnl = (currentPrice - entryPrice) * position.amount;
+    const pnlPercentage = (pnl / (entryPrice * Math.abs(position.amount))) * 100;
+
     return { pnl, pnlPercentage };
   };
 
-  const getCurrentPrice = (symbol) => {
-    // First try to get from WebSocket price cache
+  const getCurrentPrice = (symbol, position) => {
     if (currentPrices[symbol]) {
       return currentPrices[symbol].price;
     }
-    
-    // Fallback to crypto data
+
     for (let [id, crypto] of cryptoData) {
       if (crypto.symbol === symbol) {
         return crypto.current_price;
       }
     }
-    
-    return null;
+
+    return position.avg_price || position.entry_price;
   };
 
   const positionsList = Object.entries(positions);
@@ -79,7 +68,7 @@ const PositionsSidebar = ({
       <div className="positions-content">
         <div className="positions-grid">
           {positionsList.map(([symbol, position]) => {
-            const currentPrice = getCurrentPrice(symbol);
+            const currentPrice = getCurrentPrice(symbol, position);
             const { pnl, pnlPercentage } = calculatePnL(position, currentPrice);
             const isLong = position.direction === 'long';
             

@@ -24,21 +24,24 @@ class TradeExecutionManager:
         self.trade_entries = {}  # symbol -> entry details for logging
         
     async def execute_paper_trade(self, trade_data: Dict) -> Dict:
-        """Execute a paper trade with proper direction mapping"""
+        """Execute a paper trade with proper direction mapping and position netting"""
         try:
             symbol = trade_data.get('symbol')
-            direction_raw = trade_data.get('direction', 'buy')  # Get raw direction from frontend
+            # Try direction first (normalized), then fall back to trade_type for backward compatibility
+            direction_raw = trade_data.get('direction', trade_data.get('trade_type', 'buy'))
             amount = trade_data.get('amount', 0)
             price = trade_data.get('price', 0)
             trade_id = trade_data.get('trade_id', f"trade_{int(time.time())}_{symbol}")
             
             #   FIXED: Normalize direction mapping
-            if direction_raw.lower() in ['buy', 'long']:
+            if direction_raw.upper() in ['BUY', 'LONG']:
                 trade_direction = 'BUY'
                 position_direction = 'long'
-            elif direction_raw.lower() in ['sell', 'short']:
+                trade_amount = abs(amount)  # Ensure positive for long
+            elif direction_raw.upper() in ['SELL', 'SHORT']:
                 trade_direction = 'SELL'
                 position_direction = 'short'
+                trade_amount = -abs(amount)  # Ensure negative for short
             else:
                 logger.error(f"Unknown direction: {direction_raw}")
                 return {'success': False, 'message': f'Unknown direction: {direction_raw}'}
@@ -48,41 +51,134 @@ class TradeExecutionManager:
             if not all([symbol, amount, price]):
                 return {'success': False, 'message': 'Missing required trade data'}
             
-            # Calculate trade value
-            trade_value = amount * price
+            # Calculate trade value (use absolute amount for margin calculation)
+            trade_value = abs(trade_amount) * price
             
-            #   FIXED: Proper balance validation
-            if trade_direction == 'BUY':
-                if trade_value > self.paper_balance:
-                    return {'success': False, 'message': f'Insufficient balance: ${self.paper_balance:.2f} available, ${trade_value:.2f} needed'}
-            elif trade_direction == 'SELL':
-                current_position = self.positions.get(symbol)
-                if not current_position or current_position['amount'] < amount:
-                    available = current_position['amount'] if current_position else 0
-                    return {'success': False, 'message': f'Insufficient {symbol} position: {available:.6f} available, {amount:.6f} needed'}
+            #   FIXED: Proper balance validation for paper trading
+            # For paper trading, we need margin for both long and short positions
+            # Use absolute value for margin calculation to avoid negative margin
+            margin_required = trade_value * 0.1  # 10% margin requirement
+            
+            if margin_required > self.paper_balance:
+                return {'success': False, 'message': f'Insufficient balance: ${self.paper_balance:.2f} available, ${margin_required:.2f} margin needed'}
             
             # Check for existing position
             existing_position = self.positions.get(symbol)
             
             if existing_position:
-                # Close existing position first
-                await self.close_position(symbol)
+                # FIXED: Implement position netting instead of closing
+                existing_amount = existing_position.get('amount', 0)
+                existing_direction = existing_position.get('direction', 'long')
+                
+                logger.info(f"Existing position: {symbol} {existing_direction} {existing_amount}")
+                logger.info(f"New trade: {symbol} {position_direction} {trade_amount}")
+                
+                # Calculate net position
+                if existing_direction == 'long':
+                    existing_signed_amount = abs(existing_amount)
+                else:
+                    existing_signed_amount = -abs(existing_amount)
+                
+                net_amount = existing_signed_amount + trade_amount
+                
+                logger.info(f"Net position calculation: {existing_signed_amount} + {trade_amount} = {net_amount}")
+                
+                if abs(net_amount) < 0.001:  # Position completely closed
+                    # Close the position entirely
+                    await self.close_position(symbol)
+                    logger.info(f"Position {symbol} completely closed due to netting")
+                    
+                    # Return success with zero position
+                    return {
+                        'success': True,
+                        'message': f'Position {symbol} closed due to netting',
+                        'trade_data': {
+                            'trade_id': trade_id,
+                            'symbol': symbol,
+                            'direction': trade_direction,
+                            'amount': trade_amount,
+                            'price': price,
+                            'value': trade_value,
+                            'timestamp': time.time(),
+                            'trade_type': trade_data.get('trade_type', 'MANUAL'),
+                            'status': 'netted',
+                            'pnl': 0
+                        },
+                        'new_balance': self.paper_balance
+                    }
+                else:
+                    # Update existing position with net amount
+                    if net_amount > 0:
+                        new_direction = 'long'
+                        new_amount = abs(net_amount)
+                    else:
+                        new_direction = 'short'
+                        new_amount = -abs(net_amount)
+                    
+                    # Calculate weighted average price for the new position
+                    existing_value = abs(existing_amount) * existing_position.get('entry_price', 0)
+                    new_value = abs(trade_amount) * price
+                    total_value = existing_value + new_value
+                    total_amount = abs(existing_amount) + abs(trade_amount)
+                    
+                    if total_amount > 0:
+                        avg_price = total_value / total_amount
+                    else:
+                        avg_price = price
+                    
+                    # Update position
+                    existing_position['amount'] = new_amount
+                    existing_position['direction'] = new_direction
+                    existing_position['avg_price'] = avg_price
+                    existing_position['entry_price'] = avg_price
+                    existing_position['current_price'] = price
+                    existing_position['trade_value'] = abs(new_amount) * price
+                    
+                    logger.info(f"Position {symbol} updated: {new_direction} {new_amount} @ ${avg_price:.2f}")
+                    
+                    # Create trade record
+                    trade_record = {
+                        'trade_id': trade_id,
+                        'symbol': symbol,
+                        'direction': trade_direction,
+                        'amount': trade_amount,
+                        'price': price,
+                        'value': trade_value,
+                        'timestamp': time.time(),
+                        'trade_type': trade_data.get('trade_type', 'MANUAL'),
+                        'status': 'netted',
+                        'pnl': 0
+                    }
+                    
+                    self.recent_trades.insert(0, trade_record)
+                    if len(self.recent_trades) > 100:
+                        self.recent_trades = self.recent_trades[:100]
+                    
+                    # Log to database
+                    await self.db.log_trade(trade_record)
+                    
+                    return {
+                        'success': True,
+                        'message': f'Position {symbol} netted to {new_direction} {new_amount}',
+                        'trade_data': trade_record,
+                        'new_balance': self.paper_balance
+                    }
             
-            # Execute new trade
-            if trade_direction == 'BUY':
-                self.paper_balance -= trade_value
-            else:
-                self.paper_balance += trade_value
+            # No existing position, create new one
+            # Execute new trade - deduct margin from balance
+            self.paper_balance -= margin_required
             
             # Create position (matches frontend expectations)
             position = {
                 'symbol': symbol,
-                'amount': amount,
+                'amount': abs(trade_amount),
                 'avg_price': price,
                 'entry_price': price,
                 'current_price': price,
                 'unrealized_pnl': 0.0,
-                'direction': position_direction  #   FIXED: Use normalized direction
+                'direction': position_direction,
+                'margin_used': margin_required,
+                'trade_value': trade_value
             }
             
             self.positions[symbol] = position
@@ -90,7 +186,7 @@ class TradeExecutionManager:
             # Store entry details for logging
             self.trade_entries[symbol] = {
                 'entry_price': price,
-                'amount': amount,
+                'amount': trade_amount,
                 'value': trade_value,
                 'timestamp': datetime.now().isoformat(),
                 'trade_data': trade_data
@@ -101,11 +197,11 @@ class TradeExecutionManager:
                 'trade_id': trade_id,
                 'symbol': symbol,
                 'direction': trade_direction,
-                'amount': amount,
+                'amount': trade_amount,
                 'price': price,
                 'value': trade_value,
                 'timestamp': time.time(),
-                'trade_type': 'MANUAL',
+                'trade_type': trade_data.get('trade_type', 'MANUAL'),
                 'status': 'executed',
                 'pnl': 0
             }
@@ -119,7 +215,7 @@ class TradeExecutionManager:
             # Log to database
             await self.db.log_trade(trade_record)
             
-            logger.info(f"Paper trade executed: {symbol} {trade_direction} {amount} @ ${price:.2f}")
+            logger.info(f"Paper trade executed: {symbol} {trade_direction} {abs(trade_amount)} @ ${price:.2f}")
             
             return {
                 'success': True,
@@ -144,17 +240,22 @@ class TradeExecutionManager:
                 # This would typically come from market data
                 close_price = position['entry_price']  # Use entry price as fallback
             
-            # Calculate profit/loss
-            entry_value = position['amount'] * position['entry_price']
-            close_value = position['amount'] * close_price
-            
+            # Calculate profit/loss 
+            # For consistency with position PnL calculation, use abs(amount) for short positions
             if position['direction'] == 'long':
+                entry_value = position['amount'] * position['entry_price']
+                close_value = position['amount'] * close_price
                 profit_loss = close_value - entry_value
             else:  # short
+                # For short positions, use abs(amount) to get correct PnL
+                abs_amount = abs(position['amount'])
+                entry_value = abs_amount * position['entry_price']
+                close_value = abs_amount * close_price
                 profit_loss = entry_value - close_value
             
-            # Update balance
-            self.paper_balance += close_value
+            # Update balance - return margin plus profit/loss
+            margin_used = position.get('margin_used', entry_value * 0.1)
+            self.paper_balance += margin_used + profit_loss
             
             # Get entry details for logging
             entry_details = self.trade_entries.get(symbol, {})
@@ -263,6 +364,36 @@ class TradeExecutionManager:
     def get_positions(self) -> Dict:
         """Get current positions (matches frontend expectations)"""
         return self.positions.copy()
+    
+    def update_position_prices(self, price_updates: Dict[str, float]):
+        """Update position prices with current market prices"""
+        updated_positions = []
+        for symbol, current_price in price_updates.items():
+            if symbol in self.positions:
+                position = self.positions[symbol]
+                old_price = position.get('current_price', 0)
+                position['current_price'] = current_price
+                
+                # Calculate unrealized PnL
+                entry_price = position['entry_price']
+                amount = position['amount']
+                
+                # Log price updates for debugging
+                if abs(current_price - old_price) > 0.01:  # Only log significant changes
+                    logger.info(f"Position {symbol} price updated: ${old_price:.2f} -> ${current_price:.2f}")
+                updated_positions.append(symbol)
+                
+                if position['direction'] == 'long':
+                    unrealized_pnl = (current_price - entry_price) * amount
+                else:  # short
+                    # For short positions, use absolute amount to get correct PnL sign
+                    unrealized_pnl = (entry_price - current_price) * abs(amount)
+                
+                position['unrealized_pnl'] = unrealized_pnl
+                
+                logger.debug(f"Updated {symbol} position: price ${current_price:.2f}, PnL ${unrealized_pnl:.2f}")
+        
+        return self.positions
     
     def update_position_current_price(self, symbol: str, current_price: float):
         """Update the current price of a position"""

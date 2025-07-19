@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(taskkill:*)",
+      "Bash(timeout:*)",
+      "Bash(rm:*)",
+      "Bash(pkill:*)",
+      "Bash(true)",
+      "Bash(npm run build:*)",
+      "Bash(tail:*)",
+      "Bash(find:*)",
+      "Bash(npm start)",
+      "Bash(start python dummy_analysis_server.py)",
+      "Bash(curl:*)",
+      "Bash(set API_MODE=fake)",
+      "Bash(set PORT=8768)"
+    ],
+    "deny": []
+  }
+}

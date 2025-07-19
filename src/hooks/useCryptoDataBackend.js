@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useWebSocketContext } from "../contexts/WebSocketContext";
+import { useWebSocket } from "../contexts/WebSocketContext";
+import apiService from "../services/apiService";
 
 export const useCryptoDataBackend = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -15,16 +16,20 @@ export const useCryptoDataBackend = () => {
     getCryptoData,
     connect,
     disconnect
-  } = useWebSocketContext();
+  } = useWebSocket();
 
   // Extract crypto data from WebSocket data
   const cryptoData = useMemo(() => {
+    if (!wsData || !wsData.crypto_data) {
+      console.log('No WebSocket data available yet');
+      return new Map();
+    }
     const data = new Map(Object.entries(wsData.crypto_data || {}));
     console.log('Crypto data from WebSocket:', wsData.crypto_data);
     console.log('Processed crypto data:', data);
     console.log('Sample crypto entries:', Array.from(data.entries()).slice(0, 3));
     return data;
-  }, [wsData.crypto_data]);
+  }, [wsData?.crypto_data]);
 
   // Filtered data based on search term
   const filteredData = useMemo(() => {
@@ -138,9 +143,6 @@ export const useCryptoDataBackend = () => {
     currentView,
     setCurrentView,
     connectionStatus: isConnected ? "connected" : "disconnected",
-    retryConnection,
-    // Also expose WebSocket data for trading components
-    wsData,
-    isConnected,
+    retryConnection
   };
-}; 
+};

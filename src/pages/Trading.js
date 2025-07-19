@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { 
-  FiBarChart2, 
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import {
+  FiBarChart2,
   FiInfo, 
   FiTrendingUp, 
   FiTrendingDown,
@@ -13,8 +13,9 @@ import {
   FiVolume2,
   FiHome
 } from 'react-icons/fi';
-import { useWebSocketContext } from "../contexts/WebSocketContext";
+import { useWebSocket } from "../contexts/WebSocketContext";
 import { useCryptoDataBackend } from "../hooks/useCryptoDataBackend";
+
 import TradingViewChart from "../components/TradingViewChart";
 import TradingPanel from "../components/TradingPanel";
 import PositionsSidebar from "../components/PositionsSidebar";
@@ -26,6 +27,7 @@ import { useNavigate } from "react-router-dom";
 const Trading = () => {
   console.log('🔍 Trading: Page component initialized');
   const navigate = useNavigate();
+  const chartRef = useRef(null);
   const [selectedSymbol, setSelectedSymbol] = useState("BTCUSDT");
   console.log('🔍 Trading: Initial selectedSymbol:', selectedSymbol);
   const [currentPrice, setCurrentPrice] = useState(null);
@@ -55,7 +57,7 @@ const Trading = () => {
     getPositions,
     closePosition,
     sendMessage
-  } = useWebSocketContext();
+  } = useWebSocket();
   console.log('🔍 Trading: WebSocket context initialized:', { 
     isConnected, 
     dataKeys: Object.keys(data || {}),
@@ -160,6 +162,14 @@ const Trading = () => {
       setPriceChange(priceData.priceChange);
     }
   };
+
+  // Update position markers when positions data changes
+  useEffect(() => {
+    if (chartRef.current && data.positions) {
+      console.log('🔍 Trading: Positions updated, calling updatePositionMarkers on chart');
+      chartRef.current.updatePositionMarkers(data.positions);
+    }
+  }, [data.positions]);
 
   const handleBotControl = useCallback(async (action, config = {}) => {
     console.log('🔍 Trading: handleBotControl called with action:', action, 'config:', config);
@@ -510,12 +520,12 @@ const Trading = () => {
             {/* Chart Tab Content */}
             {activeTab === 'chart' && (
               <TradingViewChart
+                ref={chartRef}
                 key={`${selectedSymbol}-${currentTimeframe}`}
                 symbol={selectedSymbol}
                 onPriceUpdate={handlePriceUpdate}
                 onChartReady={handleChartReady}
                 timeframe={currentTimeframe}
-                positions={data.positions || {}}
               />
             )}
             
@@ -663,9 +673,9 @@ const Trading = () => {
                     </div>
                     <div className="trades-body">
                       {(data.recent_trades || []).filter(trade => trade.symbol === selectedSymbol).slice(0, 20).map((trade, i) => {
-                        const isBuy = trade.direction === 'LONG' || trade.side === 'buy';
+                        const isBuy = trade.direction === 'BUY' || trade.direction === 'LONG' || trade.side === 'buy';
                         const price = trade.price;
-                        const amount = trade.amount;
+                        const amount = Math.abs(trade.amount);
                         const time = new Date(trade.timestamp * 1000).toLocaleTimeString();
                         return (
                           <div key={i} className={`trade-row ${isBuy ? 'buy' : 'sell'}`}>
@@ -683,11 +693,53 @@ const Trading = () => {
             {/* AI Analysis Tab Content */}
             {activeTab === 'ai' && (
               <div className="ai-analysis-tab-content">
-                <AIAnalysis
-                  isConnected={isConnected}
-                  sendMessage={sendMessage}
-                  currentSymbol={selectedSymbol}
-                />
+                <div className="ai-analysis-header">
+                  <h3>AI Analysis for {selectedSymbol}</h3>
+                  <button 
+                    className="refresh-ai-btn"
+                    onClick={() => sendMessage({ type: 'get_ai_analysis', symbol: selectedSymbol })}
+                    disabled={!isConnected}
+                  >
+                    Refresh Analysis
+                  </button>
+                </div>
+                
+                {/* Current Analysis */}
+                {data.ai_analysis && data.ai_analysis[selectedSymbol] ? (
+                  <div className="ai-analysis-results">
+                    <div className="analysis-section">
+                      <h4>Current Analysis</h4>
+                      <div className="analysis-data">
+                        <p><strong>Symbol:</strong> {data.ai_analysis[selectedSymbol].symbol}</p>
+                        <p><strong>Confidence:</strong> {data.ai_analysis[selectedSymbol].confidence || 'N/A'}</p>
+                        <p><strong>Action:</strong> {data.ai_analysis[selectedSymbol].action || 'N/A'}</p>
+                        <p><strong>Timestamp:</strong> {data.ai_analysis[selectedSymbol].timestamp ? new Date(data.ai_analysis[selectedSymbol].timestamp * 1000).toLocaleString() : 'N/A'}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="no-ai-analysis">
+                    <p>No AI analysis available for {selectedSymbol}</p>
+                    <p>Click "Refresh Analysis" to get the latest analysis</p>
+                  </div>
+                )}
+                
+                {/* Opportunities */}
+                {data.ai_opportunities && Object.keys(data.ai_opportunities).length > 0 && (
+                  <div className="ai-opportunities-section">
+                    <h4>AI Opportunities</h4>
+                    <div className="opportunities-grid">
+                      {Object.entries(data.ai_opportunities).map(([symbol, opportunity]) => (
+                        <div key={symbol} className="opportunity-card">
+                          <h5>{symbol}</h5>
+                          <p><strong>Action:</strong> {opportunity.action}</p>
+                          <p><strong>Confidence:</strong> {opportunity.confidence}</p>
+                          <p><strong>Time:</strong> {new Date(opportunity.timestamp * 1000).toLocaleString()}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -738,6 +790,8 @@ const Trading = () => {
               stopBot={stopBot}
               getBotStatus={getBotStatus}
               updateBotConfig={updateBotConfig}
+              sendMessage={sendMessage}
+              data={data}
             />
           </div>
         </div>

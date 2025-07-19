@@ -151,7 +151,7 @@ const Login = () => {
             onClick={handleDemoLogin}
             disabled={isLoading}
           >
-            🚀 Launch Demo
+             Launch Demo
           </button>
         </div>
 

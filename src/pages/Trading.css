@@ -1047,4 +1047,117 @@
 
 .ai-chat-btn svg {
   color: #000000;
+}
+
+/* AI Analysis Styles */
+.ai-analysis-tab-content {
+  padding: 20px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.ai-analysis-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.ai-analysis-header h3 {
+  margin: 0;
+  color: #ffffff;
+}
+
+.refresh-ai-btn {
+  background: #4CAF50;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.3s;
+}
+
+.refresh-ai-btn:hover:not(:disabled) {
+  background: #45a049;
+}
+
+.refresh-ai-btn:disabled {
+  background: #555;
+  cursor: not-allowed;
+}
+
+.ai-analysis-results {
+  background: #1a1a1a;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.analysis-section h4 {
+  margin: 0 0 15px 0;
+  color: #ffffff;
+  font-size: 16px;
+}
+
+.analysis-data {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.analysis-data p {
+  margin: 5px 0;
+  color: #cccccc;
+  font-size: 14px;
+}
+
+.no-ai-analysis {
+  text-align: center;
+  padding: 40px;
+  color: #888;
+}
+
+.no-ai-analysis p {
+  margin: 10px 0;
+}
+
+.ai-opportunities-section {
+  background: #1a1a1a;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.ai-opportunities-section h4 {
+  margin: 0 0 15px 0;
+  color: #ffffff;
+  font-size: 16px;
+}
+
+.opportunities-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.opportunity-card {
+  background: #2a2a2a;
+  border-radius: 6px;
+  padding: 15px;
+  border: 1px solid #3a3a3a;
+}
+
+.opportunity-card h5 {
+  margin: 0 0 10px 0;
+  color: #ffffff;
+  font-size: 14px;
+}
+
+.opportunity-card p {
+  margin: 5px 0;
+  color: #cccccc;
+  font-size: 12px;
 } 

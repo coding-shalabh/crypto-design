@@ -257,6 +257,8 @@
   border-radius: 0;
 }
 
+
+
 /* Loading state */
 .chart-loading {
   display: flex;
@@ -334,3 +336,7 @@
 .chart-tooltip .tooltip-value {
   color: #ccc;
 } 
+
+.stat-icon * {
+  font-size: 20px;
+}

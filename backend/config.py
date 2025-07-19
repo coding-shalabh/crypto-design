@@ -13,7 +13,7 @@ class Config:
     
     # Server Configuration
     HOST = "localhost"
-    PORT = 8765
+    PORT = 8767
     
     # Trading Configuration
     PAPER_BALANCE = 100000.0  # Starting balance
@@ -28,31 +28,56 @@ class Config:
     # News and API Configuration
     GROK_NEWS_INTERVAL = 1800  # 30 minutes for Grok internet search
     CRYPTOPANIC_NEWS_INTERVAL = 60  # 1 minute for CryptoPanic news
+    
+    # API Mode Configuration
+    API_MODE = os.getenv('API_MODE', 'real')  # 'real' or 'fake'
+    FAKE_API_URL = os.getenv('FAKE_API_URL', 'http://localhost:5001')
+    REAL_API_URL = os.getenv('REAL_API_URL', 'https://openrouter.ai/api/v1')
     GENERAL_API_INTERVAL = 60  # 1 minute for other API requests
     
     # Trade Acceptance System
     TRADE_WAIT_TIME = 1800  # 30 minutes in seconds
     
-    # Bot Configuration
+    # Bot Configuration - Aligned with trading_confidence_research.md
     DEFAULT_BOT_CONFIG = {
         'max_trades_per_day': 10,
         'trade_amount_usdt': 50,
-        'profit_target_usd': 2,
-        'stop_loss_usd': 1,
+        'profit_target_min': 3,  # Aligned with research: 3% take profit
+        'profit_target_max': 5,
+        'stop_loss_percent': 1.5,  # Aligned with research: 1.5% stop loss
         'trailing_enabled': True,
         'trailing_trigger_usd': 1,
         'trailing_distance_usd': 0.5,
-        'trade_interval_secs': 60,
-        'max_concurrent_trades': 3,
+        'trade_interval_secs': 600,  # 10 minutes between analysis cycles
+        'max_concurrent_trades': 20,
         'cooldown_secs': 300,
         'allowed_pairs': ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
-        'ai_confidence_threshold': 0.5,
+        'ai_confidence_threshold': 0.65,  # Aligned with research: > 0.65 for buy/sell signals
         'run_time_minutes': 180,
         'test_mode': False,
-        'risk_per_trade_percent': 1.0,
+        'risk_per_trade_percent': 5.0,  # Aligned with research: 5% max position per trade
         'slippage_tolerance_percent': 0.1,
         'signal_sources': ['gpt', 'claude'],
-        'manual_approval_mode': False
+        'manual_approval_mode': False,
+        'monitor_open_trades': True,
+        'loss_check_interval_percent': 1,
+        'rollback_enabled': True,
+        'reanalysis_cooldown_seconds': 300,
+        'reconfirm_before_entry': True,
+        # Analysis settings
+        'analyze_all_pairs': True,  # Always analyze all pairs regardless of active trades
+        'analysis_interval_minutes': 10,  # Analysis interval in minutes
+        # Additional settings from research document
+        'daily_loss_limit_percent': 2.0,  # 2% daily loss limit
+        'min_risk_reward_ratio': 1.5,  # Minimum 1:1.5 risk/reward
+        'atr_multiplier': 1.5,  # ATR-based stop loss multiplier
+        'position_sizing_method': 'kelly',  # Kelly criterion for position sizing
+        'confidence_levels': {
+            'high': 0.75,  # High confidence: 0.75 - 1.00
+            'medium': 0.50,  # Medium confidence: 0.50 - 0.75
+            'low': 0.25,  # Low confidence: 0.25 - 0.50
+            'no_trade': 0.25  # No trade: < 0.25
+        }
     }
     
     # API Keys

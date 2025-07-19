@@ -155,7 +155,7 @@ const News = () => {
     switch (sentiment?.toLowerCase()) {
       case 'positive': return '📈';
       case 'negative': return '📉';
-      case 'bullish': return '🚀';
+      case 'bullish': return '';
       case 'bearish': return '🐻';
       default: return '➡️';
     }
@@ -186,7 +186,7 @@ const News = () => {
         source: "BlockchainDaily",
         time: "4 hours ago",
         sentiment: "positive",
-        image: "🚀",
+        image: "",
         symbol: "ETHUSDT",
         relevance_score: 7,
         search_queries: 3,
