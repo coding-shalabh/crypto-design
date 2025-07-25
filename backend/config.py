@@ -81,7 +81,7 @@ class Config:
     }
     
     # API Keys
-    OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
+    OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY') or os.getenv('OPEN_ROUTER')
     CRYPTOPANIC_API_KEY = os.getenv('CRYPTOPANIC_API_KEY')
     
     # MongoDB Configuration

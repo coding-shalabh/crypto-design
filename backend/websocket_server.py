@@ -747,41 +747,7 @@ class TradingServer:
                         'data': {'message': f'Error getting trade logs: {str(e)}'}
                     })
                     
-            # Trading bot configuration handlers
-            elif message_type == 'get_bot_config':
-                try:
-                    config = self.trading_bot.get_config()
-                    await self.safe_send(websocket, {
-                        'type': 'bot_config',
-                        'data': {
-                            'config': config,
-                            'timestamp': time.time()
-                        }
-                    })
-                except Exception as e:
-                    logger.error(f"Error getting bot config: {e}")
-                    await self.safe_send(websocket, {
-                        'type': 'error',
-                        'data': {'message': f'Error getting bot config: {str(e)}'}
-                    })
-            
-            elif message_type == 'update_bot_config':
-                try:
-                    new_config = data.get('config', {})
-                    self.trading_bot.update_config(new_config)
-                    await self.safe_send(websocket, {
-                        'type': 'config_updated',
-                        'data': {
-                            'success': True,
-                            'timestamp': time.time()
-                        }
-                    })
-                except Exception as e:
-                    logger.error(f"Error updating bot config: {e}")
-                    await self.safe_send(websocket, {
-                        'type': 'error',
-                        'data': {'message': f'Error updating bot config: {str(e)}'}
-                    })
+            # Duplicate handlers removed - using primary handlers above
             
             # Note: Removed duplicate/legacy start_bot and stop_bot handlers that were causing conflicts
             

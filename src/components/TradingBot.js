@@ -95,18 +95,28 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
   // Available trading pairs
   const availablePairs = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT', 'DOTUSDT', 'LINKUSDT'];
 
+  // Track whether config has been loaded to prevent overriding user changes
+  const [configLoaded, setConfigLoaded] = useState(false);
+
   useEffect(() => {
     console.log('🔍 TradingBot: useEffect triggered - isConnected:', isConnected);
     if (isConnected) {
-      console.log('🔍 TradingBot: Connection detected, calling getBotStatus and getBotConfig');
+      console.log('🔍 TradingBot: Connection detected, calling getBotStatus');
       getBotStatus();
-      getBotConfig(); // Load saved configuration
+      
+      // Only load config on first connection to prevent overriding user changes
+      if (!configLoaded) {
+        console.log('🔍 TradingBot: Loading initial configuration');
+        getBotConfig(); 
+        setConfigLoaded(true);
+      }
+      
       // Request additional data for all sections
       requestAllData();
     } else {
       console.log('🔍 TradingBot: No connection detected');
     }
-  }, [isConnected, getBotStatus, getBotConfig]);
+  }, [isConnected, getBotStatus, getBotConfig, configLoaded]);
 
   // 🔥 NEW: Sync bot status from global WebSocket data
   useEffect(() => {
@@ -232,7 +242,21 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       console.log('🔍 TradingBot: Processing bot_config_response:', data);
       if (data.success && data.config) {
         console.log('🔍 TradingBot: Loading saved bot configuration:', data.config);
-        setBotConfig(data.config);
+        setBotConfig(prevConfig => {
+          // Only update if significantly different from current config
+          // This prevents overriding user changes with default values
+          const hasSignificantChanges = Object.keys(data.config).some(key => 
+            JSON.stringify(prevConfig[key]) !== JSON.stringify(data.config[key])
+          );
+          
+          if (hasSignificantChanges || !configLoaded) {
+            console.log('🔍 TradingBot: Applying configuration changes');
+            return data.config;
+          } else {
+            console.log('🔍 TradingBot: No significant config changes, keeping current');
+            return prevConfig;
+          }
+        });
       }
     } else if (type === 'bot_status_update') {
       console.log('🔍 TradingBot: Processing bot_status_update:', data);

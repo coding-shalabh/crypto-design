@@ -21,7 +21,7 @@ class TradingBot:
         logger.info("Initializing Trading Bot...")
         
         self.bot_enabled = False
-        self.bot_config = Config.get_bot_config()
+        self.bot_config = self._load_bot_config()
         
         # Bot state tracking
         self.bot_start_time = None
@@ -144,7 +144,7 @@ class TradingBot:
                 'running_duration': int(running_time)
             }
             
-            logger.info(f" Bot status: Enabled={self.bot_enabled}, Active trades={len(self.bot_active_trades)}, Trades today={self.bot_trades_today}, Win rate={win_rate:.1f}%")
+            # Removed frequent bot status logging to reduce spam
             return status
             
         except Exception as e:
@@ -175,6 +175,17 @@ class TradingBot:
                     return {'success': False, 'message': f'Missing required config key: {key}'}
             
             self.bot_config.update(new_config)
+            
+            # Save configuration to file for persistence
+            try:
+                import json
+                config_file = 'bot_config.json'
+                with open(config_file, 'w') as f:
+                    json.dump(self.bot_config, f, indent=2)
+                logger.info(f" Bot config saved to {config_file}")
+            except Exception as e:
+                logger.warning(f" Failed to save config to file: {e}")
+            
             logger.info(f" Bot config updated successfully")
             
             return {'success': True, 'message': 'Bot configuration updated successfully'}
@@ -265,6 +276,25 @@ class TradingBot:
         except Exception as e:
             logger.error(f"Error checking bot trading conditions for {symbol}: {e}")
             return False
+    
+    def _load_bot_config(self) -> Dict:
+        """Load bot configuration from file or use defaults"""
+        try:
+            import json
+            import os
+            config_file = 'bot_config.json'
+            
+            if os.path.exists(config_file):
+                with open(config_file, 'r') as f:
+                    saved_config = json.load(f)
+                logger.info(f" Loaded bot config from {config_file}")
+                return saved_config
+            else:
+                logger.info(" No saved config found, using defaults")
+                return Config.get_bot_config()
+        except Exception as e:
+            logger.warning(f" Failed to load config from file: {e}, using defaults")
+            return Config.get_bot_config()
     
     def _is_symbol_allowed(self, symbol: str) -> bool:
         return symbol in self.bot_config['allowed_pairs']
