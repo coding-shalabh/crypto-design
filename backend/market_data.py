@@ -18,44 +18,58 @@ logger = logging.getLogger(__name__)
 
 class MarketDataManager:
     """Manages market data collection and caching"""
-    
+
     def __init__(self):
         self.price_cache = {}
         self.crypto_data = {}
         self.candle_data = {}
         self.last_update = {}
-        
-    async def fetch_crypto_data(self) -> Dict:
-        """Fetch current crypto prices from Binance API with enhanced SSL handling"""
-        try:
-            # Create SSL context for secure connections
+        self._session = None
+        self._connector = None
+        self._timeout = aiohttp.ClientTimeout(total=30, connect=10)
+
+    async def _ensure_session(self):
+        """Initialize HTTP session if not already created"""
+        if self._session is None or self._session.closed:
             ssl_context = ssl.create_default_context(cafile=certifi.where())
             ssl_context.check_hostname = False
             ssl_context.verify_mode = ssl.CERT_NONE
-            
-            # Create connector with SSL context and timeouts
-            connector = aiohttp.TCPConnector(
+
+            self._connector = aiohttp.TCPConnector(
                 ssl=ssl_context,
                 limit=10,
                 limit_per_host=5,
                 keepalive_timeout=30,
-                enable_cleanup_closed=True
+                enable_cleanup_closed=True,
             )
-            
-            # Set up timeout
-            timeout = aiohttp.ClientTimeout(total=30, connect=10)
-            
-            async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-                # Fetch all 24hr tickers, then filter for TARGET_PAIRS
-                url = "https://api.binance.com/api/v3/ticker/24hr"
-                
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                }
-                
-                async with session.get(url, headers=headers) as response:
-                    if response.status == 200:
-                        data = await response.json()
+
+            self._session = aiohttp.ClientSession(
+                connector=self._connector, timeout=self._timeout
+            )
+
+    async def close(self):
+        """Close the underlying HTTP session"""
+        if self._session and not self._session.closed:
+            await self._session.close()
+        self._session = None
+        self._connector = None
+        
+    async def fetch_crypto_data(self) -> Dict:
+        """Fetch current crypto prices from Binance API with enhanced SSL handling"""
+        try:
+            await self._ensure_session()
+            session = self._session
+
+            # Fetch all 24hr tickers, then filter for TARGET_PAIRS
+            url = "https://api.binance.com/api/v3/ticker/24hr"
+
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+
+            async with session.get(url, headers=headers) as response:
+                if response.status == 200:
+                    data = await response.json()
                         # Filter for only TARGET_PAIRS
                         data = [item for item in data if item['symbol'] in Config.TARGET_PAIRS]
                         for item in data:
@@ -134,17 +148,19 @@ class MarketDataManager:
     async def fetch_candlestick_data(self, symbol: str, interval: str = '1h', limit: int = 100) -> List[Dict]:
         """Fetch candlestick data for technical analysis"""
         try:
-            async with aiohttp.ClientSession() as session:
-                url = f"https://api.binance.com/api/v3/klines"
-                params = {
-                    'symbol': symbol,
-                    'interval': interval,
-                    'limit': limit
-                }
-                
-                async with session.get(url, params=params) as response:
-                    if response.status == 200:
-                        data = await response.json()
+            await self._ensure_session()
+            session = self._session
+
+            url = "https://api.binance.com/api/v3/klines"
+            params = {
+                'symbol': symbol,
+                'interval': interval,
+                'limit': limit,
+            }
+
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    data = await response.json()
                         
                         # Convert to standard format
                         candles = []
@@ -264,27 +280,12 @@ class MarketDataManager:
         """Fallback method to fetch crypto data using alternative endpoints"""
         try:
             logger.info("Trying fallback API endpoints...")
-            
-            # If no session provided, create a new one
+
             if session is None:
-                ssl_context = ssl.create_default_context(cafile=certifi.where())
-                ssl_context.check_hostname = False
-                ssl_context.verify_mode = ssl.CERT_NONE
-                
-                connector = aiohttp.TCPConnector(
-                    ssl=ssl_context,
-                    limit=10,
-                    limit_per_host=5,
-                    keepalive_timeout=30,
-                    enable_cleanup_closed=True
-                )
-                
-                timeout = aiohttp.ClientTimeout(total=30, connect=10)
-                
-                async with aiohttp.ClientSession(connector=connector, timeout=timeout) as new_session:
-                    return await self._try_fallback_endpoints(new_session)
-            else:
-                return await self._try_fallback_endpoints(session)
+                await self._ensure_session()
+                session = self._session
+
+            return await self._try_fallback_endpoints(session)
         
         except Exception as e:
             logger.error(f"Error in fallback data fetch: {e}")
@@ -526,36 +527,22 @@ class MarketDataManager:
         """Test connection to Binance API"""
         try:
             logger.info("Testing connection to Binance API...")
-            
-            # Create SSL context for secure connections
-            ssl_context = ssl.create_default_context(cafile=certifi.where())
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
-            
-            connector = aiohttp.TCPConnector(
-                ssl=ssl_context,
-                limit=10,
-                limit_per_host=5,
-                keepalive_timeout=30,
-                enable_cleanup_closed=True
-            )
-            
-            timeout = aiohttp.ClientTimeout(total=10, connect=5)
-            
-            async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-                # Test simple ping endpoint
-                url = "https://api.binance.com/api/v3/ping"
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                }
-                
-                async with session.get(url, headers=headers) as response:
-                    if response.status == 200:
-                        logger.info(" Binance API connection successful")
-                        return True
-                    else:
-                        logger.error(f"❌ Binance API connection failed: {response.status}")
-                        return False
+            await self._ensure_session()
+            session = self._session
+
+            # Test simple ping endpoint
+            url = "https://api.binance.com/api/v3/ping"
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+
+            async with session.get(url, headers=headers) as response:
+                if response.status == 200:
+                    logger.info(" Binance API connection successful")
+                    return True
+                else:
+                    logger.error(f"❌ Binance API connection failed: {response.status}")
+                    return False
         
         except Exception as e:
             logger.error(f"❌ Binance API connection test failed: {e}")
