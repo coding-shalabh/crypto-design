@@ -2470,7 +2470,7 @@ class TradingServer:
         # Wait for tasks to complete
         if self.background_tasks:
             await asyncio.gather(*self.background_tasks, return_exceptions=True)
-        
+
         # Close all client connections
         try:
             clients_copy = list(self.clients)
@@ -2481,7 +2481,13 @@ class TradingServer:
                     pass
         except Exception as e:
             logger.warning(f"Error during client cleanup: {e}")
-        
+
+        # Close market data session
+        try:
+            await self.market_data.close()
+        except Exception as e:
+            logger.warning(f"Error closing market data session: {e}")
+
         # Save state before shutdown
         await self.save_persistent_state()
         
