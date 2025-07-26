@@ -36,6 +36,17 @@ class TradingBot:
         self.bot_total_trades = 0
         self.bot_winning_trades = 0
         
+        # 🔥 NEW: Mode-specific tracking for live vs mock statistics
+        self.mock_total_profit = 0.0
+        self.mock_total_trades = 0
+        self.mock_winning_trades = 0
+        self.mock_trades_today = 0
+        
+        self.live_total_profit = 0.0
+        self.live_total_trades = 0
+        self.live_winning_trades = 0
+        self.live_trades_today = 0
+        
         # Confidence Score Calculator
         self.confidence_calculator = ConfidenceScoreCalculator()
         
@@ -72,6 +83,9 @@ class TradingBot:
             if current_time - self.bot_last_trade_reset > 86400:  # 24 hours
                 logger.info(" Resetting daily trade counter")
                 self.bot_trades_today = 0
+                # 🔥 NEW: Reset mode-specific daily counters
+                self.mock_trades_today = 0
+                self.live_trades_today = 0
                 self.bot_last_trade_reset = current_time
             
             self.bot_enabled = True
@@ -133,15 +147,24 @@ class TradingBot:
             
             status = {
                 'enabled': self.bot_enabled,
-                'start_time': self.bot_start_time,
+                'start_time': datetime.fromtimestamp(self.bot_start_time).isoformat() if self.bot_start_time else None,
                 'active_trades': len(self.bot_active_trades),
                 'trades_today': self.bot_trades_today,
-                'total_profit': self.bot_total_profit,
+                'total_profit': round(self.bot_total_profit, 2),
                 'total_trades': self.bot_total_trades,
                 'winning_trades': self.bot_winning_trades,
                 'win_rate': round(win_rate, 2),
                 'pair_status': pair_status,
-                'running_duration': int(running_time)
+                'running_duration': int(running_time),
+                # 🔥 NEW: Mode-specific statistics
+                'mock_total_profit': round(self.mock_total_profit, 2),
+                'mock_total_trades': self.mock_total_trades,
+                'mock_winning_trades': self.mock_winning_trades,
+                'mock_trades_today': self.mock_trades_today,
+                'live_total_profit': round(self.live_total_profit, 2),
+                'live_total_trades': self.live_total_trades,
+                'live_winning_trades': self.live_winning_trades,
+                'live_trades_today': self.live_trades_today
             }
             
             # Removed frequent bot status logging to reduce spam
@@ -317,45 +340,72 @@ class TradingBot:
     def _is_confidence_above_threshold(self, confidence: float) -> bool:
         return confidence >= self.bot_config['ai_confidence_threshold']
 
-    async def execute_trade(self, symbol: str, direction: str, amount_usdt: float, price: float, trade_type: str, confidence_score: float, analysis_data: Dict) -> Dict:
-        """Execute a trade using the trade execution manager"""
+    async def execute_trade(self, symbol: str, direction: str, amount_usdt: float, price: float, trade_type: str, confidence_score: float, analysis_data: Dict, trading_mode: str = 'mock') -> Dict:
+        """Execute a trade using the trading manager (supports both mock and live trading)"""
         try:
             # Calculate quantity based on amount and price
             quantity = amount_usdt / price
             
-            # Create trade data
-            trade_data = {
-                'symbol': symbol,
-                'direction': direction.lower(),  # 'buy' or 'sell'
-                'amount': quantity,
-                'price': price,
-                'trade_id': f"bot_trade_{int(time.time())}_{symbol}",
-                'trade_type': 'bot',  # Mark as bot trade
-                'bot_trade': True,
-                'analysis_confidence': confidence_score,
-                'analysis_data': analysis_data
-            }
+            # Import trading manager if not already available
+            if not hasattr(self, 'trading_manager'):
+                from trading_manager import TradingManager
+                self.trading_manager = TradingManager()
+                # Set the trading mode
+                self.trading_manager.set_trading_mode(trading_mode)
             
-            # Execute the trade using the trade execution manager
-            if hasattr(self, 'trade_execution_manager'):
-                result = await self.trade_execution_manager.execute_paper_trade(trade_data)
-            else:
-                # Fallback: create a mock successful trade
-                logger.warning(f"Trade execution manager not available, creating mock trade for {symbol}")
-                result = {
-                    'success': True,
-                    'message': f'Mock trade executed: {symbol} {direction}',
-                    'trade_data': trade_data,
-                    'new_balance': 1000.0  # Mock balance
+            # Place the order using trading manager (handles both mock and live)
+            try:
+                order_result = self.trading_manager.place_order(
+                    symbol=symbol,
+                    side=direction.upper(),  # 'BUY' or 'SELL'
+                    order_type='MARKET',  # Use market orders for bot trading
+                    quantity=quantity,
+                    price=price
+                )
+                
+                if order_result.get('success'):
+                    # Create trade data for logging
+                    trade_data = {
+                        'symbol': symbol,
+                        'direction': direction.lower(),
+                        'amount': quantity,
+                        'price': price,
+                        'trade_id': f"bot_trade_{int(time.time())}_{symbol}",
+                        'trade_type': 'bot',
+                        'bot_trade': True,
+                        'analysis_confidence': confidence_score,
+                        'analysis_data': analysis_data,
+                        'mode': trading_mode
+                    }
+                    
+                    # Log the trade to database
+                    if hasattr(self, 'db_manager'):
+                        await self.db_manager.log_trade(trade_data)
+                    
+                    return {
+                        'success': True,
+                        'message': f'{trading_mode.capitalize()} trade executed: {symbol} {direction}',
+                        'trade_data': trade_data,
+                        'order_result': order_result
+                    }
+                else:
+                    return {
+                        'success': False,
+                        'message': f'Order placement failed: {order_result.get("message", "Unknown error")}'
+                    }
+                    
+            except Exception as order_error:
+                logger.error(f"Order placement failed for {symbol}: {order_error}")
+                return {
+                    'success': False,
+                    'message': f'Order placement error: {str(order_error)}'
                 }
-            
-            return result
             
         except Exception as e:
             logger.error(f"Error in execute_trade for {symbol}: {e}")
             return {'success': False, 'message': f'Error: {str(e)}'}
 
-    async def execute_bot_trade(self, symbol: str, analysis: Dict, current_price: float, balance: float) -> Dict:
+    async def execute_bot_trade(self, symbol: str, analysis: Dict, current_price: float, balance: float, trading_mode: str = 'mock') -> Dict:
         """Execute a bot trade based on AI analysis"""
         try:
             # Handle new GPT final recommendation format
@@ -389,10 +439,32 @@ class TradingBot:
 
             if action == 'HOLD':
                 logger.info(f"Trade execution for {symbol}: HOLD signal received. Not executing trade.")
+                self._log_failed_trade(symbol, 'HOLD signal received', ai_confidence, analysis)
                 return {'success': False, 'message': 'HOLD signal received'}
 
             # Calculate trade amount
             trade_amount_usdt = self._calculate_trade_amount(balance)
+            
+            # Check if trade amount is sufficient
+            if trade_amount_usdt <= 0:
+                reason = f"Insufficient balance for trade. Required: ${self.bot_config.get('trade_amount_usdt', 50)}, Available: ${balance:.2f}"
+                logger.warning(f"Trade execution failed for {symbol}: {reason}")
+                self._log_failed_trade(symbol, reason, ai_confidence, analysis)
+                return {'success': False, 'message': reason}
+            
+            # Check daily trade limit
+            if not self._is_within_daily_trade_limit():
+                reason = f"Daily trade limit reached ({self.bot_config['max_trades_per_day']} trades)"
+                logger.warning(f"Trade execution failed for {symbol}: {reason}")
+                self._log_failed_trade(symbol, reason, ai_confidence, analysis)
+                return {'success': False, 'message': reason}
+            
+            # Check concurrent trade limit
+            if not self._is_within_concurrent_trade_limit():
+                reason = f"Concurrent trade limit reached ({self.bot_config['max_concurrent_trades']} trades)"
+                logger.warning(f"Trade execution failed for {symbol}: {reason}")
+                self._log_failed_trade(symbol, reason, ai_confidence, analysis)
+                return {'success': False, 'message': reason}
             
             # Execute the trade
             trade_result = await self.execute_trade(
@@ -402,7 +474,8 @@ class TradingBot:
                 price=current_price,
                 trade_type='bot',
                 confidence_score=ai_confidence,
-                analysis_data=analysis
+                analysis_data=analysis,
+                trading_mode=trading_mode
             )
             
             if trade_result.get('success'):
@@ -416,6 +489,14 @@ class TradingBot:
                 self.bot_total_trades += 1
                 self.bot_pair_status[symbol] = 'in_trade'
                 
+                # 🔥 NEW: Update mode-specific statistics
+                if trading_mode == 'mock':
+                    self.mock_total_trades += 1
+                    self.mock_trades_today += 1
+                elif trading_mode == 'live':
+                    self.live_total_trades += 1
+                    self.live_trades_today += 1
+                
                 # Store active trade details
                 self.bot_active_trades[symbol] = {
                     'symbol': symbol,
@@ -426,13 +507,17 @@ class TradingBot:
                     'confidence': ai_confidence
                 }
             else:
-                logger.error(f"Bot trade failed for {symbol}: {trade_result.get('message', 'Unknown error')}")
+                reason = trade_result.get('message', 'Trade execution failed')
+                logger.error(f"Bot trade failed for {symbol}: {reason}")
+                self._log_failed_trade(symbol, reason, ai_confidence, analysis)
             
             return trade_result
             
         except Exception as e:
+            reason = f"Exception during trade execution: {str(e)}"
             logger.error(f"Error executing bot trade for {symbol}: {e}")
-            return {'success': False, 'message': f'Error: {str(e)}'}
+            self._log_failed_trade(symbol, reason, ai_confidence, analysis)
+            return {'success': False, 'message': reason}
     
     def _should_override_hold(self, action: str, confidence: float) -> bool:
         # Override HOLD if confidence is above the trading threshold
@@ -445,11 +530,42 @@ class TradingBot:
         return 'BUY'
 
     def _calculate_trade_amount(self, balance: float) -> float:
-        trade_amount_usdt = min(
-            self.bot_config['trade_amount_usdt'],
-            balance * 0.95  # Use 95% of balance as safety
-        )
-        return trade_amount_usdt if trade_amount_usdt >= 10 else 0
+        """Calculate trade amount based on configuration limits and actual balance"""
+        try:
+            # Get configured amounts
+            configured_amount = self.bot_config.get('trade_amount_usdt', 50)
+            max_amount_per_trade = self.bot_config.get('max_amount_per_trade_usdt', 500)
+            risk_percent = self.bot_config.get('risk_per_trade_percent', 5.0)
+            
+            # Calculate maximum based on risk percentage
+            max_risk_amount = balance * (risk_percent / 100)
+            
+            # Calculate safe balance usage (95% of balance as safety)
+            safe_balance_amount = balance * 0.95
+            
+            # Choose the minimum of all limits to ensure we don't exceed any constraint
+            trade_amount_usdt = min(
+                configured_amount,        # User configured amount
+                max_amount_per_trade,     # Max amount per trade limit
+                max_risk_amount,          # Risk-based limit
+                safe_balance_amount       # Balance safety limit
+            )
+            
+            # Ensure minimum trade amount
+            min_trade_amount = 10
+            if trade_amount_usdt < min_trade_amount:
+                logger.warning(f"Calculated trade amount ${trade_amount_usdt:.2f} is below minimum ${min_trade_amount}")
+                return 0
+            
+            logger.info(f"Trade amount calculated: ${trade_amount_usdt:.2f} "
+                       f"(config: ${configured_amount}, max: ${max_amount_per_trade}, "
+                       f"risk: ${max_risk_amount:.2f}, balance: ${balance:.2f})")
+            
+            return trade_amount_usdt
+            
+        except Exception as e:
+            logger.error(f"Error calculating trade amount: {e}")
+            return self.bot_config.get('trade_amount_usdt', 50)  # Fallback to configured amount
 
     def _create_trade_data(
         self, symbol: str, action: str, quantity: float, current_price: float, trade_amount_usdt: float, confidence: float, recommendation: Dict
@@ -615,4 +731,35 @@ class TradingBot:
         self.bot_cooldown_end = {}
         self.bot_trailing_stops = {}
         self.opportunity_cooldown = {}
-        logger.info(" Bot statistics reset complete") 
+        logger.info(" Bot statistics reset complete")
+    
+    def _log_failed_trade(self, symbol: str, reason: str, confidence: float, analysis: Dict):
+        """Log a failed trade attempt with reason"""
+        try:
+            failed_trade = {
+                'symbol': symbol,
+                'action': analysis.get('final_recommendation', {}).get('action', 'UNKNOWN'),
+                'confidence': confidence,
+                'reason': reason,
+                'timestamp': time.time(),
+                'failed': True,
+                'bot_trade': True,
+                'trade_type': 'bot',
+                'analysis_data': analysis,
+                'direction': 'LONG',  # Default, will be updated based on action
+                'amount': 0,
+                'price': 0,
+                'pnl': 0
+            }
+            
+            # Add to trade history so it appears in the frontend
+            self.bot_trade_history.append(failed_trade)
+            
+            # Keep only last 100 trades
+            if len(self.bot_trade_history) > 100:
+                self.bot_trade_history = self.bot_trade_history[-100:]
+            
+            logger.info(f"Logged failed trade for {symbol}: {reason} (confidence: {confidence:.2f})")
+            
+        except Exception as e:
+            logger.error(f"Failed to log failed trade: {e}") 

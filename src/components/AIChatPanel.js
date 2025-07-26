@@ -51,7 +51,7 @@ const AIChatPanel = ({ aiInsights, onRequestAnalysis, symbol, isConnected }) => 
       const tradeIdea = claude_analysis.trade_idea || {};
       const reasoning = claude_analysis.reasoning || {};
       
-      formattedContent += `**🔍 Claude's Deep Analysis:**\n`;
+      formattedContent += `** Claude's Deep Analysis:**\n`;
       formattedContent += `• **Direction:** ${tradeIdea.direction || 'Neutral'}\n`;
       formattedContent += `• **Confidence:** ${((tradeIdea.confidence_score || 0) * 100).toFixed(1)}%\n`;
       formattedContent += `• **Risk Level:** ${reasoning.risk_assessment || 'Medium'}\n`;

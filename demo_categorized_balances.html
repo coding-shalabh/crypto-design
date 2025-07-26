@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Categorized Balances Demo</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .demo-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .demo-section {
+            background: #2d2d2d;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border: 1px solid #444;
+        }
+        .status { 
+            padding: 10px; 
+            margin: 10px 0; 
+            border-radius: 5px; 
+        }
+        .success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .error { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .info { background: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+        button { 
+            padding: 12px 24px; 
+            margin: 8px; 
+            background: #f0b90b;
+            color: #000;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background: #fcd535;
+            transform: translateY(-1px);
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        pre { 
+            background: #1a1a1a; 
+            padding: 15px; 
+            border-radius: 5px; 
+            border: 1px solid #333;
+            overflow-x: auto;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        .wallet-section {
+            background: #222;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 6px;
+            border-left: 3px solid #f0b90b;
+        }
+        .wallet-header {
+            font-weight: bold;
+            color: #f0b90b;
+            margin-bottom: 10px;
+        }
+        .asset-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid #333;
+        }
+        .asset-item:last-child {
+            border-bottom: none;
+        }
+        .transfer-form {
+            background: #333;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+        .form-group {
+            margin: 10px 0;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #ccc;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 8px;
+            background: #444;
+            border: 1px solid #555;
+            color: #fff;
+            border-radius: 4px;
+        }
+        .form-row {
+            display: flex;
+            gap: 15px;
+            align-items: end;
+        }
+        .form-row .form-group {
+            flex: 1;
+        }
+        .transfer-arrow {
+            color: #f0b90b;
+            font-size: 18px;
+            font-weight: bold;
+            padding: 0 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <h1>🏦 Binance-Style Categorized Balances Demo</h1>
+        
+        <div class="demo-section">
+            <h2>Connection Status</h2>
+            <div id="connectionStatus" class="status info">Connecting to WebSocket...</div>
+            <button onclick="connect()">Connect</button>
+            <button onclick="disconnect()">Disconnect</button>
+        </div>
+
+        <div class="demo-section">
+            <h2>Trading Mode</h2>
+            <div id="tradingMode" class="status info">Current Mode: Unknown</div>
+            <button onclick="setMode('mock')">Set Mock Mode</button>
+            <button onclick="setMode('live')">Set Live Mode</button>
+        </div>
+
+        <div class="demo-section">
+            <h2>Categorized Balances</h2>
+            <button onclick="getCategorizedBalances()">Load Categorized Balances</button>
+            <div id="balanceResults"></div>
+        </div>
+
+        <div class="demo-section">
+            <h2>Transfer Between Wallets</h2>
+            <div class="transfer-form">
+                <div class="form-group">
+                    <label>Asset:</label>
+                    <input type="text" id="transferAsset" placeholder="e.g., USDT, BTC" value="USDT">
+                </div>
+                <div class="form-group">
+                    <label>Amount:</label>
+                    <input type="number" id="transferAmount" placeholder="0.00" value="100" step="0.00000001">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>From Wallet:</label>
+                        <select id="fromWallet">
+                            <option value="SPOT">Spot Wallet</option>
+                            <option value="FUTURES">Futures Wallet</option>
+                            <option value="MARGIN">Cross Margin</option>
+                            <option value="FUNDING">Funding Wallet</option>
+                        </select>
+                    </div>
+                    <div class="transfer-arrow">→</div>
+                    <div class="form-group">
+                        <label>To Wallet:</label>
+                        <select id="toWallet">
+                            <option value="SPOT">Spot Wallet</option>
+                            <option value="FUTURES" selected>Futures Wallet</option>
+                            <option value="MARGIN">Cross Margin</option>
+                            <option value="FUNDING">Funding Wallet</option>
+                        </select>
+                    </div>
+                </div>
+                <button onclick="executeTransfer()">Execute Transfer</button>
+            </div>
+            <div id="transferResults"></div>
+        </div>
+
+        <div class="demo-section">
+            <h2>Transfer History</h2>
+            <button onclick="getTransferHistory()">Load Transfer History</button>
+            <div id="historyResults"></div>
+        </div>
+
+        <div class="demo-section">
+            <h2>WebSocket Messages Log</h2>
+            <button onclick="clearLog()">Clear Log</button>
+            <div id="messageLog"></div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let messageCount = 0;
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('messageLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `status ${type}`;
+            logEntry.innerHTML = `[${timestamp}] ${message}`;
+            logDiv.appendChild(logEntry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+            
+            if (logDiv.children.length > 20) {
+                logDiv.removeChild(logDiv.firstChild);
+            }
+        }
+
+        function updateStatus(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.className = `status ${type}`;
+            element.textContent = message;
+        }
+
+        function connect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                updateStatus('connectionStatus', 'Already connected', 'success');
+                return;
+            }
+
+            ws = new WebSocket('ws://localhost:8768');
+            
+            ws.onopen = () => {
+                updateStatus('connectionStatus', 'Connected to WebSocket server', 'success');
+                log('WebSocket connected', 'success');
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                log(`Received: ${data.type}`, 'info');
+                
+                if (data.type === 'initial_data' || data.type === 'price_updates_batch') {
+                    return; // Skip these for demo
+                }
+                
+                console.log('WebSocket message:', data);
+            };
+            
+            ws.onerror = (error) => {
+                updateStatus('connectionStatus', 'WebSocket error', 'error');
+                log('WebSocket error', 'error');
+            };
+            
+            ws.onclose = () => {
+                updateStatus('connectionStatus', 'WebSocket disconnected', 'error');
+                log('WebSocket disconnected', 'error');
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+                updateStatus('connectionStatus', 'Disconnected', 'info');
+            }
+        }
+
+        function setMode(mode) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                updateStatus('tradingMode', 'Not connected to WebSocket', 'error');
+                return;
+            }
+
+            ws.send(JSON.stringify({
+                type: 'set_trading_mode',
+                data: { mode: mode }
+            }));
+
+            updateStatus('tradingMode', `Setting mode to ${mode.toUpperCase()}...`, 'info');
+            
+            // Listen for response
+            const originalOnMessage = ws.onmessage;
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'trading_mode_set') {
+                    const actualMode = data.data.mode.toUpperCase();
+                    const connection = data.data.connection_test;
+                    updateStatus('tradingMode', 
+                        `Mode: ${actualMode} ${connection?.success ? '(Connected)' : '(Disconnected)'}`, 
+                        connection?.success ? 'success' : 'error'
+                    );
+                }
+                originalOnMessage(event);
+            };
+        }
+
+        function getCategorizedBalances() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                updateStatus('balanceResults', 'Not connected to WebSocket', 'error');
+                return;
+            }
+
+            ws.send(JSON.stringify({
+                type: 'get_categorized_balances'
+            }));
+
+            log('Requesting categorized balances...', 'info');
+            
+            // Listen for response
+            const originalOnMessage = ws.onmessage;
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'categorized_balances') {
+                    displayCategorizedBalances(data.data);
+                }
+                originalOnMessage(event);
+            };
+        }
+
+        function displayCategorizedBalances(data) {
+            const resultsDiv = document.getElementById('balanceResults');
+            const balances = data.balances;
+            const mode = data.mode;
+            
+            let html = `<div class="status success">Mode: ${mode.toUpperCase()}</div>`;
+            
+            for (const [walletType, walletData] of Object.entries(balances)) {
+                html += `
+                    <div class="wallet-section">
+                        <div class="wallet-header">
+                            ${walletData.name} - Total: $${walletData.total_usdt.toFixed(2)}
+                        </div>
+                `;
+                
+                if (walletData.balances.length > 0) {
+                    walletData.balances.forEach(balance => {
+                        html += `
+                            <div class="asset-item">
+                                <span><strong>${balance.asset}</strong></span>
+                                <span>Total: ${balance.total} | Free: ${balance.free} | Locked: ${balance.locked}</span>
+                            </div>
+                        `;
+                    });
+                } else {
+                    html += '<div style="color:#888;font-style:italic;">No assets in this wallet</div>';
+                }
+                
+                html += '</div>';
+            }
+            
+            resultsDiv.innerHTML = html;
+            log('Categorized balances loaded successfully', 'success');
+        }
+
+        function executeTransfer() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                updateStatus('transferResults', 'Not connected to WebSocket', 'error');
+                return;
+            }
+
+            const asset = document.getElementById('transferAsset').value;
+            const amount = parseFloat(document.getElementById('transferAmount').value);
+            const fromWallet = document.getElementById('fromWallet').value;
+            const toWallet = document.getElementById('toWallet').value;
+
+            if (!asset || !amount || fromWallet === toWallet) {
+                updateStatus('transferResults', 'Please fill all fields and select different wallets', 'error');
+                return;
+            }
+
+            ws.send(JSON.stringify({
+                type: 'transfer_between_wallets',
+                data: {
+                    asset: asset,
+                    amount: amount,
+                    from_wallet: fromWallet,
+                    to_wallet: toWallet
+                }
+            }));
+
+            updateStatus('transferResults', 'Executing transfer...', 'info');
+            log(`Transfer: ${amount} ${asset} from ${fromWallet} to ${toWallet}`, 'info');
+            
+            // Listen for response
+            const originalOnMessage = ws.onmessage;
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'wallet_transfer_result') {
+                    const result = data.data;
+                    updateStatus('transferResults', 
+                        result.message, 
+                        result.success ? 'success' : 'error'
+                    );
+                    if (result.success) {
+                        log(`Transfer successful: ID ${result.transaction_id}`, 'success');
+                    } else {
+                        log(`Transfer failed: ${result.message}`, 'error');
+                    }
+                }
+                originalOnMessage(event);
+            };
+        }
+
+        function getTransferHistory() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                updateStatus('historyResults', 'Not connected to WebSocket', 'error');
+                return;
+            }
+
+            ws.send(JSON.stringify({
+                type: 'get_transfer_history',
+                data: { limit: 10 }
+            }));
+
+            log('Requesting transfer history...', 'info');
+            
+            // Listen for response
+            const originalOnMessage = ws.onmessage;
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'transfer_history') {
+                    displayTransferHistory(data.data);
+                }
+                originalOnMessage(event);
+            };
+        }
+
+        function displayTransferHistory(data) {
+            const resultsDiv = document.getElementById('historyResults');
+            const transfers = data.transfers;
+            const mode = data.mode;
+            
+            let html = `<div class="status success">Mode: ${mode.toUpperCase()} | Transfers: ${transfers.length}</div>`;
+            
+            if (transfers.length > 0) {
+                html += '<div style="margin-top:15px;">';
+                transfers.forEach(transfer => {
+                    html += `
+                        <div class="asset-item">
+                            <span><strong>${transfer.amount} ${transfer.asset}</strong></span>
+                            <span>${transfer.from_wallet} → ${transfer.to_wallet}</span>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+            } else {
+                html += '<div style="color:#888;font-style:italic;margin-top:15px;">No transfer history found</div>';
+            }
+            
+            resultsDiv.innerHTML = html;
+            log('Transfer history loaded successfully', 'success');
+        }
+
+        function clearLog() {
+            document.getElementById('messageLog').innerHTML = '';
+        }
+
+        // Auto-connect on page load
+        window.onload = () => {
+            connect();
+        };
+    </script>
+</body>
+</html>

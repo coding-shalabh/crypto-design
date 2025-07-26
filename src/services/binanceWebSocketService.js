@@ -15,7 +15,7 @@ class BinanceWebSocketService {
   // Subscribe to price updates
   subscribe(callback) {
     this.subscribers.add(callback);
-    console.log('🔍 BinanceWS: Added subscriber, total:', this.subscribers.size);
+    console.log(' BinanceWS: Added subscriber, total:', this.subscribers.size);
     
     // Connect if not already connected
     if (!this.isConnected && !this.isConnecting) {
@@ -26,7 +26,7 @@ class BinanceWebSocketService {
   // Unsubscribe from price updates
   unsubscribe(callback) {
     this.subscribers.delete(callback);
-    console.log('🔍 BinanceWS: Removed subscriber, total:', this.subscribers.size);
+    console.log(' BinanceWS: Removed subscriber, total:', this.subscribers.size);
     
     // Disconnect if no more subscribers
     if (this.subscribers.size === 0 && this.ws) {
@@ -39,8 +39,8 @@ class BinanceWebSocketService {
     const newSymbols = symbolList.filter(symbol => !this.symbols.has(symbol.toLowerCase()));
     newSymbols.forEach(symbol => this.symbols.add(symbol.toLowerCase()));
     
-    console.log('🔍 BinanceWS: Added symbols:', newSymbols);
-    console.log('🔍 BinanceWS: Total symbols watching:', this.symbols.size);
+    console.log(' BinanceWS: Added symbols:', newSymbols);
+    console.log(' BinanceWS: Total symbols watching:', this.symbols.size);
     
     // Reconnect with new symbols if already connected
     if (this.isConnected && newSymbols.length > 0) {
@@ -51,8 +51,8 @@ class BinanceWebSocketService {
   // Remove symbols from watch list
   removeSymbols(symbolList) {
     symbolList.forEach(symbol => this.symbols.delete(symbol.toLowerCase()));
-    console.log('🔍 BinanceWS: Removed symbols:', symbolList);
-    console.log('🔍 BinanceWS: Remaining symbols:', this.symbols.size);
+    console.log(' BinanceWS: Removed symbols:', symbolList);
+    console.log(' BinanceWS: Remaining symbols:', this.symbols.size);
     
     // Reconnect with updated symbols if connected
     if (this.isConnected) {
@@ -63,7 +63,7 @@ class BinanceWebSocketService {
   // Connect to Binance WebSocket
   connect() {
     if (this.isConnecting || this.isConnected) {
-      console.log('🔍 BinanceWS: Already connecting or connected');
+      console.log(' BinanceWS: Already connecting or connected');
       return;
     }
 
@@ -76,20 +76,20 @@ class BinanceWebSocketService {
     }
 
     this.isConnecting = true;
-    console.log('🔍 BinanceWS: Connecting to Binance WebSocket...');
+    console.log(' BinanceWS: Connecting to Binance WebSocket...');
 
     try {
       // Create stream names for all symbols
       const streams = Array.from(this.symbols).map(symbol => `${symbol}@ticker`);
       const streamUrl = `wss://stream.binance.com:9443/ws/${streams.join('/')}`;
       
-      console.log('🔍 BinanceWS: Connecting to:', streamUrl);
-      console.log('🔍 BinanceWS: Watching symbols:', Array.from(this.symbols));
+      console.log(' BinanceWS: Connecting to:', streamUrl);
+      console.log(' BinanceWS: Watching symbols:', Array.from(this.symbols));
 
       this.ws = new WebSocket(streamUrl);
 
       this.ws.onopen = () => {
-        console.log('🔍 BinanceWS: Connected successfully');
+        console.log(' BinanceWS: Connected successfully');
         this.isConnected = true;
         this.isConnecting = false;
         this.reconnectAttempts = 0;
@@ -101,18 +101,18 @@ class BinanceWebSocketService {
           const data = JSON.parse(event.data);
           this.handleMessage(data);
         } catch (error) {
-          console.error('🔍 BinanceWS: Error parsing message:', error);
+          console.error(' BinanceWS: Error parsing message:', error);
         }
       };
 
       this.ws.onerror = (error) => {
-        console.error('🔍 BinanceWS: WebSocket error:', error);
+        console.error(' BinanceWS: WebSocket error:', error);
         this.isConnected = false;
         this.isConnecting = false;
       };
 
       this.ws.onclose = (event) => {
-        console.log('🔍 BinanceWS: Connection closed:', event.code, event.reason);
+        console.log(' BinanceWS: Connection closed:', event.code, event.reason);
         this.isConnected = false;
         this.isConnecting = false;
         
@@ -123,7 +123,7 @@ class BinanceWebSocketService {
       };
 
     } catch (error) {
-      console.error('🔍 BinanceWS: Error creating WebSocket:', error);
+      console.error(' BinanceWS: Error creating WebSocket:', error);
       this.isConnecting = false;
       this.scheduleReconnect();
     }
@@ -153,7 +153,7 @@ class BinanceWebSocketService {
       try {
         callback(priceUpdate);
       } catch (error) {
-        console.error('🔍 BinanceWS: Error in subscriber callback:', error);
+        console.error(' BinanceWS: Error in subscriber callback:', error);
       }
     });
   }
@@ -161,7 +161,7 @@ class BinanceWebSocketService {
   // Schedule reconnection
   scheduleReconnect() {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('🔍 BinanceWS: Max reconnection attempts reached');
+      console.error(' BinanceWS: Max reconnection attempts reached');
       return;
     }
 
@@ -171,7 +171,7 @@ class BinanceWebSocketService {
       this.maxReconnectDelay
     );
 
-    console.log(`🔍 BinanceWS: Scheduling reconnect attempt ${this.reconnectAttempts} in ${delay}ms`);
+    console.log(` BinanceWS: Scheduling reconnect attempt ${this.reconnectAttempts} in ${delay}ms`);
 
     this.reconnectTimeout = setTimeout(() => {
       this.connect();
@@ -188,14 +188,14 @@ class BinanceWebSocketService {
 
   // Reconnect with current symbols
   reconnect() {
-    console.log('🔍 BinanceWS: Reconnecting...');
+    console.log(' BinanceWS: Reconnecting...');
     this.disconnect();
     setTimeout(() => this.connect(), 1000);
   }
 
   // Disconnect
   disconnect() {
-    console.log('🔍 BinanceWS: Disconnecting...');
+    console.log(' BinanceWS: Disconnecting...');
     this.isConnected = false;
     this.isConnecting = false;
     this.clearReconnectTimeout();

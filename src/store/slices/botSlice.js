@@ -17,6 +17,8 @@ const initialState = {
   config: {
     max_trades_per_day: 10,
     trade_amount_usdt: 50,
+    max_amount_per_trade_usdt: 500,
+    leverage_per_trade: 5,
     profit_target_min: 3,
     profit_target_max: 5,
     stop_loss_percent: 1.5,

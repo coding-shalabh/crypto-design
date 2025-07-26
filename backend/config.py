@@ -42,6 +42,8 @@ class Config:
     DEFAULT_BOT_CONFIG = {
         'max_trades_per_day': 10,
         'trade_amount_usdt': 50,
+        'max_amount_per_trade_usdt': 500,  # Maximum amount per single trade
+        'leverage_per_trade': 5,  # Default leverage for futures trades
         'profit_target_min': 3,  # Aligned with research: 3% take profit
         'profit_target_max': 5,
         'stop_loss_percent': 1.5,  # Aligned with research: 1.5% stop loss
@@ -85,7 +87,7 @@ class Config:
     CRYPTOPANIC_API_KEY = os.getenv('CRYPTOPANIC_API_KEY')
     
     # MongoDB Configuration
-    MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/')
+    MONGODB_URI = os.getenv('MONGODB_URI')
     MONGODB_DB_NAME = 'crypto_trading'
     MONGODB_COLLECTION_NAME = 'trades'
     

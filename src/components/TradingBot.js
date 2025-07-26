@@ -15,6 +15,7 @@ import {
   FiX
 } from 'react-icons/fi';
 import { useWebSocket } from '../contexts/WebSocketContext';
+import { useTradingMode } from '../contexts/TradingModeContext';
 import './TradingBot.css';
 import { BiChart, BiDollar, BiTargetLock, BiUpvote } from 'react-icons/bi';
 import { CiAlignBottom, CiBadgeDollar, CiBag1, CiCalendar, CiChartLine, CiChat1, CiDollar, CiFlag1, CiRepeat, CiSaveUp1, CiWavePulse1 } from 'react-icons/ci';
@@ -24,19 +25,26 @@ import { toast } from 'react-toastify';
 import { GrTarget } from 'react-icons/gr';
 import { useState, useEffect } from 'react';
 
-const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotConfig, getBotConfig, sendMessage, data }) => {
-  console.log('🔍 TradingBot: Component initialized with props:', { isConnected, startBot: !!startBot, stopBot: !!stopBot, getBotStatus: !!getBotStatus, updateBotConfig: !!updateBotConfig, getBotConfig: !!getBotConfig });
+const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotConfig, getBotConfig, sendMessage, data, lastConnectionCheck, connectionErrorDetails }) => {
+  // Remove debug logging to prevent spam
+  // console.log(' TradingBot: Component initialized with props:', { isConnected, startBot: !!startBot, stopBot: !!stopBot, getBotStatus: !!getBotStatus, updateBotConfig: !!updateBotConfig, getBotConfig: !!getBotConfig });
   
   // Get WebSocket context for real-time updates
   const { lastMessage } = useWebSocket();
+  
+  // Get trading mode context
+  const { isLiveMode, tradingMode } = useTradingMode();
+  // console.log(' TradingBot: Current trading mode:', { isLiveMode, tradingMode });
 
   
   const [botEnabled, setBotEnabled] = useState(false);
-  console.log('🔍 TradingBot: Initial botEnabled state:', botEnabled);
+  // console.log(' TradingBot: Initial botEnabled state:', botEnabled);
   
   const [botConfig, setBotConfig] = useState({
     max_trades_per_day: 10,
     trade_amount_usdt: 50,
+    max_amount_per_trade_usdt: 500,
+    leverage_per_trade: 5,
     profit_target_min: 3,  // Aligned with backend: 3% take profit
     profit_target_max: 5,
     stop_loss_percent: 1.5,  // Aligned with backend: 1.5% stop loss
@@ -60,7 +68,7 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
     signal_sources: ['gpt', 'claude'],
     manual_approval_mode: false
   });
-  console.log('🔍 TradingBot: Initial botConfig:', botConfig);
+  // console.log(' TradingBot: Initial botConfig:', botConfig);
   
   const [botStatus, setBotStatus] = useState({
     enabled: false,
@@ -74,19 +82,19 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
     pair_status: {},
     running_duration: 0
   });
-  console.log('🔍 TradingBot: Initial botStatus:', botStatus);
+  // console.log(' TradingBot: Initial botStatus:', botStatus);
   
   const [activeTrades, setActiveTrades] = useState({});
-  console.log('🔍 TradingBot: Initial activeTrades:', activeTrades);
+  // console.log(' TradingBot: Initial activeTrades:', activeTrades);
   
   const [tradeHistory, setTradeHistory] = useState([]);
-  console.log('🔍 TradingBot: Initial tradeHistory length:', tradeHistory.length);
+  // console.log(' TradingBot: Initial tradeHistory length:', tradeHistory.length);
   
   const [analysisLogs, setAnalysisLogs] = useState([]);
-  console.log('🔍 TradingBot: Initial analysisLogs length:', analysisLogs.length);
+  // console.log(' TradingBot: Initial analysisLogs length:', analysisLogs.length);
   
   const [tradeLogs, setTradeLogs] = useState([]);
-  console.log('🔍 TradingBot: Initial tradeLogs length:', tradeLogs.length);
+  // console.log(' TradingBot: Initial tradeLogs length:', tradeLogs.length);
   
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [configLoading, setConfigLoading] = useState(false);
@@ -99,14 +107,14 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
   const [configLoaded, setConfigLoaded] = useState(false);
 
   useEffect(() => {
-    console.log('🔍 TradingBot: useEffect triggered - isConnected:', isConnected);
+    // console.log(' TradingBot: useEffect triggered - isConnected:', isConnected);
     if (isConnected) {
-      console.log('🔍 TradingBot: Connection detected, calling getBotStatus');
+      // console.log(' TradingBot: Connection detected, calling getBotStatus');
       getBotStatus();
       
       // Only load config on first connection to prevent overriding user changes
       if (!configLoaded) {
-        console.log('🔍 TradingBot: Loading initial configuration');
+        // console.log(' TradingBot: Loading initial configuration');
         getBotConfig(); 
         setConfigLoaded(true);
       }
@@ -114,14 +122,14 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       // Request additional data for all sections
       requestAllData();
     } else {
-      console.log('🔍 TradingBot: No connection detected');
+      // console.log(' TradingBot: No connection detected');
     }
   }, [isConnected, getBotStatus, getBotConfig, configLoaded]);
 
   // 🔥 NEW: Sync bot status from global WebSocket data
   useEffect(() => {
     if (data.bot_status) {
-      console.log('🔍 TradingBot: Syncing bot status from global WebSocket data:', data.bot_status);
+      // console.log(' TradingBot: Syncing bot status from global WebSocket data:', data.bot_status);
       setBotStatus(prevStatus => ({
         ...prevStatus,
         ...data.bot_status
@@ -129,6 +137,16 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       setBotEnabled(data.bot_status.enabled || false);
     }
   }, [data.bot_status]);
+
+  // 🔥 NEW: Handle trading mode changes
+  useEffect(() => {
+    // console.log(' TradingBot: Trading mode changed:', { isLiveMode, tradingMode });
+    if (isConnected) {
+      // Refresh all data when trading mode changes
+      // console.log(' TradingBot: Refreshing data for new trading mode');
+      requestAllData();
+    }
+  }, [tradingMode, isLiveMode, isConnected]);
 
   // Request all required data for the trading bot dashboard
   const requestAllData = () => {
@@ -141,8 +159,8 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       // Request positions (active trades)
       sendMessage({ type: 'get_positions' });
 
-      // Request trade history from MongoDB
-      sendMessage({ type: 'get_trade_history', limit: 100 });
+      // Request trade history from MongoDB with mode parameter
+      sendMessage({ type: 'get_trade_history', limit: 100, mode: isLiveMode ? 'live' : 'mock' });
 
       // Request analysis logs
       sendMessage({ type: 'get_analysis_logs', limit: 50 });
@@ -150,9 +168,9 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       // Request trade logs with confidence scores
       sendMessage({ type: 'get_trade_logs', limit: 50 });
 
-      console.log('🔍 TradingBot: All data requests sent');
+      // console.log(' TradingBot: All data requests sent');
     } catch (error) {
-      console.error('🔍 TradingBot: Error requesting data:', error);
+      // console.error(' TradingBot: Error requesting data:', error);
     }
   };
 
@@ -165,23 +183,33 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
         // Request updated bot status and positions
         sendMessage({ type: 'get_bot_status' });
         sendMessage({ type: 'get_positions' });
+        // Request trade history with current mode
+        sendMessage({ type: 'get_trade_history', limit: 100, mode: isLiveMode ? 'live' : 'mock' });
       }
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [isConnected, sendMessage]);
+  }, [isConnected, sendMessage, isLiveMode]);
 
   // Global message handler for bot responses
   const handleBotResponse = (message) => {
-    console.log('🔍 TradingBot: handleBotResponse called with message:', message);
+    // console.log(' TradingBot: handleBotResponse called with message:', message);
     const { type, data } = message;
-    console.log('🔍 TradingBot: Message type:', type, 'Data:', data);
-    console.log('🔍 TradingBot: Full message object:', JSON.stringify(message, null, 2));
+    // console.log(' TradingBot: Message type:', type, 'Data:', data);
+    // console.log(' TradingBot: Full message object:', JSON.stringify(message, null, 2));
     
     if (type === 'bot_status_response') {
-      console.log('🔍 TradingBot: Processing bot_status_response:', data);
+      // console.log(' TradingBot: Processing bot_status_response:', data);
       setBotStatus(data);
       setBotEnabled(data.enabled);
+      
+      // 🔥 NEW: Extract trading balance and update data state if available
+      if (data.trading_balance) {
+        // console.log(' TradingBot: Updating trading balance from bot status:', data.trading_balance);
+        // Note: The data prop is managed by the parent component, so we just log the balance
+        // The parent component should handle updating the global data state
+        // console.log(' TradingBot: Trading balance available:', data.trading_balance);
+      }
       
       // Convert active_trades array to object with symbol keys
       if (data.active_trades && Array.isArray(data.active_trades)) {
@@ -202,46 +230,46 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
           }
         });
         setActiveTrades(activeTradesObject);
-        console.log('🔍 TradingBot: Converted active_trades array to object:', activeTradesObject);
+        // console.log(' TradingBot: Converted active_trades array to object:', activeTradesObject);
       }
       
-      console.log('🔍 TradingBot: Updated botStatus to:', data);
-      console.log('🔍 TradingBot: Updated botEnabled to:', data.enabled);
+      // console.log(' TradingBot: Updated botStatus to:', data);
+      // console.log(' TradingBot: Updated botEnabled to:', data.enabled);
     } else if (type === 'start_bot_response') {
-      console.log('🔍 TradingBot: Processing start_bot_response:', data);
+      // console.log(' TradingBot: Processing start_bot_response:', data);
       if (data.success) {
-        console.log('🔍 TradingBot: Bot start successful, setting botEnabled to true');
+        // console.log(' TradingBot: Bot start successful, setting botEnabled to true');
         setBotEnabled(true);
         // Get updated bot status immediately after starting
         setTimeout(() => {
-          console.log('🔍 TradingBot: Getting updated bot status after start');
+          // console.log(' TradingBot: Getting updated bot status after start');
           getBotStatus();
         }, 1000);
       } else {
-        console.log('🔍 TradingBot: Bot start failed:', data.error);
+        // console.log(' TradingBot: Bot start failed:', data.error);
       }
     } else if (type === 'stop_bot_response') {
-      console.log('🔍 TradingBot: Processing stop_bot_response:', data);
+      // console.log(' TradingBot: Processing stop_bot_response:', data);
       if (data.success) {
-        console.log('🔍 TradingBot: Bot stop successful, setting botEnabled to false');
+        // console.log(' TradingBot: Bot stop successful, setting botEnabled to false');
         setBotEnabled(false);
         getBotStatus();
       } else {
-        console.log('🔍 TradingBot: Bot stop failed:', data.error);
+        // console.log(' TradingBot: Bot stop failed:', data.error);
       }
     } else if (type === 'update_bot_config_response') {
-      console.log('🔍 TradingBot: Processing update_bot_config_response:', data);
+      // console.log(' TradingBot: Processing update_bot_config_response:', data);
       if (data.success) {
-        console.log('🔍 TradingBot: Config update successful, closing modal');
+        // console.log(' TradingBot: Config update successful, closing modal');
         setShowConfigModal(false);
         getBotStatus();
       } else {
-        console.log('🔍 TradingBot: Config update failed:', data.error);
+        // console.log(' TradingBot: Config update failed:', data.error);
       }
     } else if (type === 'bot_config_response') {
-      console.log('🔍 TradingBot: Processing bot_config_response:', data);
+      // console.log(' TradingBot: Processing bot_config_response:', data);
       if (data.success && data.config) {
-        console.log('🔍 TradingBot: Loading saved bot configuration:', data.config);
+        // console.log(' TradingBot: Loading saved bot configuration:', data.config);
         setBotConfig(prevConfig => {
           // Only update if significantly different from current config
           // This prevents overriding user changes with default values
@@ -250,23 +278,23 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
           );
           
           if (hasSignificantChanges || !configLoaded) {
-            console.log('🔍 TradingBot: Applying configuration changes');
+            // console.log(' TradingBot: Applying configuration changes');
             return data.config;
           } else {
-            console.log('🔍 TradingBot: No significant config changes, keeping current');
+            // console.log(' TradingBot: No significant config changes, keeping current');
             return prevConfig;
           }
         });
       }
     } else if (type === 'bot_status_update') {
-      console.log('🔍 TradingBot: Processing bot_status_update:', data);
+      // console.log(' TradingBot: Processing bot_status_update:', data);
       setBotStatus(prev => {
         const newStatus = { ...prev, ...data };
-        console.log('🔍 TradingBot: Updated botStatus from', prev, 'to', newStatus);
+        // console.log(' TradingBot: Updated botStatus from', prev, 'to', newStatus);
         return newStatus;
       });
       setBotEnabled(data.enabled);
-      console.log('🔍 TradingBot: Updated botEnabled to:', data.enabled);
+      // console.log(' TradingBot: Updated botEnabled to:', data.enabled);
     } else if (type === 'bot_trade_executed') {
       // Add/update active trade for this symbol
       setActiveTrades(prev => {
@@ -301,7 +329,7 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       }
       getBotStatus();
     } else if (type === 'ai_analysis_response') {
-      console.log('🔍 TradingBot: Processing ai_analysis_response:', data);
+      // console.log(' TradingBot: Processing ai_analysis_response:', data);
       
       // Create analysis log entry
       const analysisLog = {
@@ -318,11 +346,11 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       
       setAnalysisLogs(prev => {
         const newLogs = [analysisLog, ...prev.slice(0, 49)];
-        console.log('🔍 TradingBot: Added analysis log. New logs length:', newLogs.length);
+        // console.log(' TradingBot: Added analysis log. New logs length:', newLogs.length);
         return newLogs;
       });
     } else if (type === 'ai_opportunity_alert') {
-      console.log('🔍 TradingBot: Processing ai_opportunity_alert:', data);
+      // console.log(' TradingBot: Processing ai_opportunity_alert:', data);
       
       // Create trade opportunity log entry
       const tradeLog = {
@@ -337,11 +365,11 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       
       setTradeLogs(prev => {
         const newLogs = [tradeLog, ...prev.slice(0, 49)];
-        console.log('🔍 TradingBot: Added trade opportunity log. New logs length:', newLogs.length);
+        // console.log(' TradingBot: Added trade opportunity log. New logs length:', newLogs.length);
         return newLogs;
       });
     } else if (type === 'automated_trade_executed') {
-      console.log('🔍 TradingBot: Processing automated_trade_executed:', data);
+      // console.log(' TradingBot: Processing automated_trade_executed:', data);
       
       // Create successful trade log entry
       const tradeLog = {
@@ -356,7 +384,7 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       
       setTradeLogs(prev => {
         const newLogs = [tradeLog, ...prev.slice(0, 49)];
-        console.log('🔍 TradingBot: Added automated trade log. New logs length:', newLogs.length);
+        // console.log(' TradingBot: Added automated trade log. New logs length:', newLogs.length);
         return newLogs;
       });
       
@@ -364,7 +392,7 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       if (data.trade_result && data.trade_result.trade_data) {
         setActiveTrades(prev => {
           const newTrades = { ...prev, [data.symbol]: data.trade_result.trade_data };
-          console.log('🔍 TradingBot: Updated activeTrades:', newTrades);
+          // console.log(' TradingBot: Updated activeTrades:', newTrades);
           return newTrades;
         });
       }
@@ -372,7 +400,7 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       // Refresh bot status
       getBotStatus();
     } else if (type === 'auto_close_notification') {
-      console.log('🎯 TradingBot: Processing auto_close_notification:', data);
+      // console.log('🎯 TradingBot: Processing auto_close_notification:', data);
       
       // Create auto-close notification log entry
       const tradeLog = {
@@ -388,15 +416,15 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       
       setTradeLogs(prev => {
         const newLogs = [tradeLog, ...prev.slice(0, 49)];
-        console.log('🔍 TradingBot: Added auto-close notification log. New logs length:', newLogs.length);
+        // console.log(' TradingBot: Added auto-close notification log. New logs length:', newLogs.length);
         return newLogs;
       });
       
       // Show prominent auto-close notification
-      console.log('🎯 AUTO-CLOSE NOTIFICATION:', data.message);
+      // console.log('🎯 AUTO-CLOSE NOTIFICATION:', data.message);
       
     } else if (type === 'automated_trade_failed') {
-      console.log('🔍 TradingBot: Processing automated_trade_failed:', data);
+      // console.log(' TradingBot: Processing automated_trade_failed:', data);
       
       // Create failed trade log entry
       const tradeLog = {
@@ -411,17 +439,17 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       
       setTradeLogs(prev => {
         const newLogs = [tradeLog, ...prev.slice(0, 49)];
-        console.log('🔍 TradingBot: Added failed trade log. New logs length:', newLogs.length);
+        // console.log(' TradingBot: Added failed trade log. New logs length:', newLogs.length);
         return newLogs;
       });
     } else if (type === 'trade_closed') {
-      console.log('🔍 TradingBot: Processing trade_closed:', data);
+      // console.log(' TradingBot: Processing trade_closed:', data);
       
       // Remove from active trades
       setActiveTrades(prev => {
         const newTrades = { ...prev };
         delete newTrades[data.symbol];
-        console.log('🔍 TradingBot: Removed closed trade from activeTrades:', newTrades);
+        // console.log(' TradingBot: Removed closed trade from activeTrades:', newTrades);
         return newTrades;
       });
       
@@ -445,20 +473,20 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       
       setTradeLogs(prev => {
         const newLogs = [tradeLog, ...prev.slice(0, 49)];
-        console.log('🔍 TradingBot: Added trade closure log. New logs length:', newLogs.length);
+        // console.log(' TradingBot: Added trade closure log. New logs length:', newLogs.length);
         return newLogs;
       });
       
       // Show auto-close notification if applicable
       if (isAutoClose) {
         // You can add a toast notification here if you have a notification system
-        console.log('🎯 AUTO-CLOSE TRIGGERED:', data.notification || message);
+        // console.log('🎯 AUTO-CLOSE TRIGGERED:', data.notification || message);
       }
       
       // Refresh bot status
       getBotStatus();
     } else if (type === 'rollback_trade_executed') {
-      console.log('🔍 TradingBot: Processing rollback_trade_executed:', data);
+      // console.log(' TradingBot: Processing rollback_trade_executed:', data);
       
       // Create rollback trade log entry
       const tradeLog = {
@@ -473,7 +501,7 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       
       setTradeLogs(prev => {
         const newLogs = [tradeLog, ...prev.slice(0, 49)];
-        console.log('🔍 TradingBot: Added rollback trade log. New logs length:', newLogs.length);
+        // console.log(' TradingBot: Added rollback trade log. New logs length:', newLogs.length);
         return newLogs;
       });
       
@@ -491,7 +519,7 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       
       setAnalysisLogs(prev => {
         const newLogs = [logEntry, ...prev.slice(0, 49)];
-        console.log('🔍 TradingBot: Added analysis log. New logs length:', newLogs.length);
+        // console.log(' TradingBot: Added analysis log. New logs length:', newLogs.length);
         return newLogs;
       });
     } else if (type === 'trade_log') {
@@ -512,62 +540,62 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       
       setTradeLogs(prev => {
         const newLogs = [logEntry, ...prev.slice(0, 49)];
-        console.log('🔍 TradingBot: Added trade log. New logs length:', newLogs.length);
+        // console.log(' TradingBot: Added trade log. New logs length:', newLogs.length);
         return newLogs;
       });
     } else if (type === 'trade_history_response') {
-      console.log('🔍 TradingBot: Processing trade_history_response:', data);
+      // console.log(' TradingBot: Processing trade_history_response:', data);
       if (data.trades) {
         setTradeHistory(data.trades);
       }
     } else if (type === 'analysis_logs_response') {
-      console.log('🔍 TradingBot: Processing analysis_logs_response:', data);
+      // console.log(' TradingBot: Processing analysis_logs_response:', data);
       if (data.logs) {
         setAnalysisLogs(data.logs);
       }
     } else if (type === 'trade_logs_response') {
-      console.log('🔍 TradingBot: Processing trade_logs_response:', data);
+      // console.log(' TradingBot: Processing trade_logs_response:', data);
       if (data.logs) {
         setTradeLogs(data.logs);
       }
     } else if (type === 'positions_response') {
-      console.log('🔍 TradingBot: Processing positions_response:', data);
+      // console.log(' TradingBot: Processing positions_response:', data);
       // Update active trades from positions data
       if (data.positions) {
         setActiveTrades(data.positions);
       }
     } else {
-      console.log('🔍 TradingBot: Unknown message type:', type);
+      // console.log(' TradingBot: Unknown message type:', type);
     }
   };
 
   // Set up WebSocket message handler
   useEffect(() => {
-    console.log('🔍 TradingBot: Setting up WebSocket message handler');
+    // console.log(' TradingBot: Setting up WebSocket message handler');
     
     if (lastMessage) {
-      console.log('🔍 TradingBot: Received lastMessage:', lastMessage);
+      // console.log(' TradingBot: Received lastMessage:', lastMessage);
       handleBotResponse(lastMessage);
     }
   }, [lastMessage]);
 
   // Real-time timer update for running duration
   useEffect(() => {
-    console.log('🔍 TradingBot: Setting up timer effect - botEnabled:', botEnabled, 'start_time:', botStatus.start_time);
+    // console.log(' TradingBot: Setting up timer effect - botEnabled:', botEnabled, 'start_time:', botStatus.start_time);
     let timerInterval;
     
     if (botEnabled && botStatus.start_time) {
-      console.log('🔍 TradingBot: Starting timer interval');
+      // console.log(' TradingBot: Starting timer interval');
       timerInterval = setInterval(() => {
         const currentTime = Math.floor(Date.now() / 1000);
         const startTime = Math.floor(botStatus.start_time);
         const runningDuration = currentTime - startTime;
         
-        console.log('🔍 TradingBot: Timer update - currentTime:', currentTime, 'startTime:', startTime, 'runningDuration:', runningDuration);
+        // console.log(' TradingBot: Timer update - currentTime:', currentTime, 'startTime:', startTime, 'runningDuration:', runningDuration);
         
         setBotStatus(prev => {
           const newStatus = { ...prev, running_duration: runningDuration };
-          console.log('🔍 TradingBot: Updated running_duration to:', runningDuration);
+          // console.log(' TradingBot: Updated running_duration to:', runningDuration);
           return newStatus;
         });
       }, 1000); // Update every second
@@ -575,16 +603,16 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
     
     return () => {
       if (timerInterval) {
-        console.log('🔍 TradingBot: Clearing timer interval');
+        // console.log(' TradingBot: Clearing timer interval');
         clearInterval(timerInterval);
       }
     };
   }, [botEnabled, botStatus.start_time]);
 
   const handleStartBot = async () => {
-    console.log('🔍 TradingBot: handleStartBot called');
+    // console.log(' TradingBot: handleStartBot called');
     if (!isConnected) {
-      console.log('🔍 TradingBot: Cannot start bot - not connected');
+      // console.log(' TradingBot: Cannot start bot - not connected');
       return;
     }
     
@@ -593,23 +621,30 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
     );
     
     if (!confirmed) {
-      console.log('🔍 TradingBot: User cancelled bot start');
+      // console.log(' TradingBot: User cancelled bot start');
       return;
     }
     
-    console.log('🔍 TradingBot: Starting bot with config:', botConfig);
+    // console.log(' TradingBot: Starting bot with config:', botConfig);
     try {
-      await startBot(botConfig);
-      console.log('🔍 TradingBot: startBot call completed');
+      // Include trading mode in the config
+      const configWithMode = {
+        ...botConfig,
+        trading_mode: tradingMode,
+        is_live_mode: isLiveMode
+      };
+      // console.log(' TradingBot: Starting bot with mode-aware config:', configWithMode);
+      await startBot(configWithMode);
+      // console.log(' TradingBot: startBot call completed');
     } catch (error) {
-      console.error('🔍 TradingBot: Error starting bot:', error);
+      // console.error(' TradingBot: Error starting bot:', error);
     }
   };
 
   const handleStopBot = async () => {
-    console.log('🔍 TradingBot: handleStopBot called');
+    // console.log(' TradingBot: handleStopBot called');
     if (!isConnected) {
-      console.log('🔍 TradingBot: Cannot stop bot - not connected');
+      // console.log(' TradingBot: Cannot stop bot - not connected');
       return;
     }
     
@@ -618,39 +653,46 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
     );
     
     if (!confirmed) {
-      console.log('🔍 TradingBot: User cancelled bot stop');
+      // console.log(' TradingBot: User cancelled bot stop');
       return;
     }
     
-    console.log('🔍 TradingBot: Stopping bot');
+    // console.log(' TradingBot: Stopping bot');
     try {
       await stopBot();
-      console.log('🔍 TradingBot: stopBot call completed');
+      // console.log(' TradingBot: stopBot call completed');
     } catch (error) {
-      console.error('🔍 TradingBot: Error stopping bot:', error);
+      // console.error(' TradingBot: Error stopping bot:', error);
     }
   };
 
   const handleUpdateConfig = async (newConfig) => {
-    console.log('🔍 TradingBot: handleUpdateConfig called with:', newConfig);
+    // console.log(' TradingBot: handleUpdateConfig called with:', newConfig);
     if (!isConnected) {
-      console.log('🔍 TradingBot: Cannot update config - not connected');
+      // console.log(' TradingBot: Cannot update config - not connected');
       toast.error('Cannot update configuration - not connected to server');
       return;
     }
     
     setConfigLoading(true);
-    console.log('🔍 TradingBot: Set configLoading to true');
+    // console.log(' TradingBot: Set configLoading to true');
     try {
-      await updateBotConfig(newConfig);
-      console.log('🔍 TradingBot: updateBotConfig call completed');
+      // Include trading mode in the config
+      const configWithMode = {
+        ...newConfig,
+        trading_mode: tradingMode,
+        is_live_mode: isLiveMode
+      };
+      // console.log(' TradingBot: Updating config with mode:', configWithMode);
+      await updateBotConfig(configWithMode);
+      // console.log(' TradingBot: updateBotConfig call completed');
       toast.success('Configuration saved successfully!');
     } catch (error) {
-      console.error('🔍 TradingBot: Error updating bot config:', error);
+      // console.error(' TradingBot: Error updating bot config:', error);
       toast.error('Failed to save configuration. Please try again.');
     } finally {
       setConfigLoading(false);
-      console.log('🔍 TradingBot: Set configLoading to false');
+      // console.log(' TradingBot: Set configLoading to false');
     }
   };
 
@@ -671,7 +713,8 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
   const renderOverview = () => {
     // Calculate real-time statistics from available data
     const positions = data?.positions || {};
-    const balance = data?.paper_balance || 0;
+    // Use live balance when in live mode, otherwise use paper balance
+    const balance = isLiveMode ? (data?.trading_balance?.total || 0) : (data?.paper_balance || 0);
     const recentTrades = data?.recent_trades || [];
     
     // Calculate stats from available data
@@ -679,54 +722,55 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
     const totalValue = Object.values(positions).reduce((sum, pos) => sum + (pos.trade_value || 0), 0);
     const totalPnL = Object.values(positions).reduce((sum, pos) => sum + (pos.unrealized_pnl || 0), 0);
     
-    // Bot statistics from bot status
+    // 🔥 UPDATED: Use mode-specific bot statistics
     const botStats = botStatus || {};
-    const totalTrades = botStats.total_trades || 0;
-    const winningTrades = botStats.winning_trades || 0;
-    const tradestoday = botStats.trades_today || 0;
-    const winRate = totalTrades > 0 ? (winningTrades / totalTrades * 100) : 0;
+    
+    // Use mode-specific statistics based on current trading mode
+    const modePrefix = isLiveMode ? 'live_' : 'mock_';
+    const totalTrades = botStats[`${modePrefix}total_trades`] || botStats.total_trades || 0;
+    const winningTrades = botStats[`${modePrefix}winning_trades`] || botStats.winning_trades || 0;
+    const tradestoday = botStats[`${modePrefix}trades_today`] || botStats.trades_today || 0;
+    const totalProfit = botStats[`${modePrefix}total_profit`] || botStats.total_profit || 0;
+    
+    // If in live mode and no live data exists, show zeros instead of mock data
+    const safeTotalTrades = isLiveMode && !botStats[`${modePrefix}total_trades`] ? 0 : totalTrades;
+    const safeWinningTrades = isLiveMode && !botStats[`${modePrefix}winning_trades`] ? 0 : winningTrades;
+    const safeTradesToday = isLiveMode && !botStats[`${modePrefix}trades_today`] ? 0 : tradestoday;
+    const safeTotalProfit = isLiveMode && !botStats[`${modePrefix}total_profit`] ? 0 : totalProfit;
+    
+    const winRate = safeTotalTrades > 0 ? (safeWinningTrades / safeTotalTrades * 100) : 0;
     const activeTrades = botStats.active_trades || totalPositions;
-    const totalProfit = botStats.total_profit || 0;
 
     const formatCurrency = (value) => {
-      if (typeof value !== 'number') return '$0.00';
-      return `$${value.toFixed(2)}`;
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(value);
     };
 
     const formatPercentage = (value) => {
-      if (typeof value !== 'number') return '0.00%';
       return `${value.toFixed(2)}%`;
     };
 
     return (
-      <div className="bot-overview">
-        <div className="overview-header">
-          <div className="overview-header-left">
+      <div className="overview-section">
+        <div className="section-header">
           <h3>Trading Overview</h3>
+          {/* 🔥 NEW: Connection Status Display */}
           <div className="connection-status">
-            <span className={`status-dot ${isConnected ? 'connected' : 'disconnected'}`}></span>
-            {isConnected ? 'Connected' : 'Disconnected'}
-          </div>
-          </div>
-       
-          <div className="bot-status-header">
-            <h4>Bot Status</h4>
-            <div className="bot-status-indicator" aria-live="polite">
-              <span
-                className="status-dot"
-                style={{
-                  display: 'inline-block',
-                  width: '10px',
-                  height: '10px',
-                  borderRadius: '50%',
-                  marginRight: '8px',
-                  backgroundColor: botStats.enabled ? '#28c76f' : '#ea5455',
-                  verticalAlign: 'middle',
-                }}
-                aria-label={botStats.enabled ? 'Online' : 'Offline'}
-                title={botStats.enabled ? 'Online' : 'Offline'}
-              ></span>
+            <div className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
+              <span className="status-dot"></span>
+              <span className="status-text">
+                {isConnected ? 'Connected' : 'Disconnected'}
+              </span>
             </div>
+            {!isConnected && (
+              <div className="connection-info">
+                <small>Last check: {lastConnectionCheck ? new Date(lastConnectionCheck).toLocaleTimeString() : 'Never'}</small>
+              </div>
+            )}
           </div>
         </div>
 
@@ -750,12 +794,12 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
           <div className="stat-card">
             <div className="stat-icon"><CiBag1/></div>
             <div className="stat-label">Total Profit</div>
-            <div className="stat-value">{formatCurrency(totalProfit)}</div>
+            <div className="stat-value">{formatCurrency(safeTotalProfit)}</div>
           </div>
           <div className="stat-card">
             <div className="stat-icon"><CiAlignBottom/></div>
             <div className="stat-label">Total Trades</div>
-            <div className="stat-value">{totalTrades}</div>
+            <div className="stat-value">{safeTotalTrades}</div>
           </div>
           <div className="stat-card">
             <div className="stat-icon"><CiFlag1/></div>
@@ -765,7 +809,7 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
           <div className="stat-card">
             <div className="stat-icon"><CiCalendar/></div>
             <div className="stat-label">Trades Today</div>
-            <div className="stat-value">{tradestoday}</div>
+            <div className="stat-value">{safeTradesToday}</div>
           </div>
           <div className="stat-card">
             <div className="stat-icon"><CiWallet/></div>
@@ -881,7 +925,7 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
             {positionEntries.map(([symbol, position]) => {
               // Ensure position is an object and extract values safely
               if (!position || typeof position !== 'object') {
-                console.warn('Invalid position data for symbol:', symbol, position);
+                // console.warn('Invalid position data for symbol:', symbol, position);
                 return null;
               }
 
@@ -969,7 +1013,7 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
               'idle': '⏳',
               'in_trade': '🔥',
               'cooldown': '❄️',
-              'analyzing': '🔍',
+              'analyzing': '',
               'no_selected': '⚫'
             };
 
@@ -1112,7 +1156,7 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
         <div className="logs-container">
           {/* Analysis Logs Section */}
           <div className="log-section">
-            <h4>🔍 Analysis Logs ({analysisLogs.length})</h4>
+            <h4> Analysis Logs ({analysisLogs.length})</h4>
             <div className="log-list">
               {analysisLogs.length === 0 ? (
                 <div className="empty-state">
@@ -1239,6 +1283,32 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
                 }))}
                 min="1"
                 step="0.01"
+              />
+            </div>
+            <div className="form-row">
+              <label>Max Amount Per Trade (USDT):</label>
+              <input
+                type="number"
+                value={botConfig.max_amount_per_trade_usdt}
+                onChange={(e) => setBotConfig(prev => ({
+                  ...prev,
+                  max_amount_per_trade_usdt: parseFloat(e.target.value)
+                }))}
+                min="1"
+                step="0.01"
+              />
+            </div>
+            <div className="form-row">
+              <label>Leverage Per Trade:</label>
+              <input
+                type="number"
+                value={botConfig.leverage_per_trade}
+                onChange={(e) => setBotConfig(prev => ({
+                  ...prev,
+                  leverage_per_trade: parseInt(e.target.value)
+                }))}
+                min="1"
+                max="125"
               />
             </div>
             <div className="form-row">

@@ -10,6 +10,8 @@ import { store } from './store/store';
 
 // Import WebSocket context
 import { WebSocketProvider } from './contexts/WebSocketContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { TradingModeProvider } from './contexts/TradingModeContext';
 
 // Import real-time price service
 import realTimePriceService from './services/realTimePriceService';
@@ -27,49 +29,81 @@ import Login from './pages/Login';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import ErrorBoundary from './components/ErrorBoundary';
+import AuthPage from './components/AuthPage';
+import TradingModeToggle from './components/TradingModeToggle';
 
-function App() {
-  console.log('🔍 App: Application component initialized');
-  
-  // Check if user is authenticated (you can implement your own auth logic)
-  const isAuthenticated = true; // For now, always authenticated
-  console.log('🔍 App: Authentication status:', isAuthenticated);
+// Create main app component that uses authentication
+const MainApp = () => {
+  const { isAuthenticated, user, loading, login } = useAuth();
+  const [tradingMode, setTradingMode] = React.useState('mock');
 
-  // Debug logging for component lifecycle
+  // Initialize real-time price service when authenticated
   React.useEffect(() => {
-    console.log('🔍 App: Component mounted');
-    console.log('🔍 App: Current authentication status:', isAuthenticated);
-    console.log('🔍 App: Available routes:', ['/', '/trading', '/analytics', '/settings', '/login']);
-    
-    // 🔥 Initialize real-time price service with Redux store
     if (isAuthenticated) {
-      console.log('🔍 App: Initializing real-time price service...');
       realTimePriceService.init(store);
     }
     
     return () => {
-      console.log('🔍 App: Component unmounting');
-      // Cleanup real-time price service
       realTimePriceService.cleanup();
     };
   }, [isAuthenticated]);
 
-  // Debug logging for route changes
-  const handleRouteChange = (pathname) => {
-    console.log('🔍 App: Route changed to:', pathname);
-  };
+  if (loading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        background: '#1a1a1a',
+        color: 'white'
+      }}>
+        Loading...
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
-    console.log('🔍 App: User not authenticated, redirecting to login');
-    return (
-      <Provider store={store}>
+    return <AuthPage onAuthSuccess={login} />;
+  }
+
+  return (
+    <ErrorBoundary>
+      <div className="App">
+        <ErrorBoundary>
+          <Sidebar />
+        </ErrorBoundary>
+        <div className="main-content">
+          <ErrorBoundary>
+            <Header />
+          </ErrorBoundary>
+          <ErrorBoundary>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/trading" element={<Trading />} />
+              <Route path="/portfolio" element={<Portfolio />} />
+              <Route path="/charts" element={<Trading />} />
+              <Route path="/analytics" element={<Analytics />} />
+              <Route path="/news" element={<News />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </ErrorBoundary>
+        </div>
+        <TradingModeToggle onModeChange={setTradingMode} />
+      </div>
+    </ErrorBoundary>
+  );
+};
+
+function App() {
+  return (
+    <Provider store={store}>
+      <AuthProvider>
         <WebSocketProvider>
-          <Router>
-            <div className="App">
-              <Routes>
-                <Route path="/login" element={<Login />} />
-                <Route path="*" element={<Navigate to="/login" replace />} />
-              </Routes>
+          <TradingModeProvider>
+            <Router>
+              <MainApp />
               <ToastContainer 
                 position="top-right"
                 autoClose={3000}
@@ -81,120 +115,10 @@ function App() {
                 draggable
                 pauseOnHover
               />
-            </div>
-          </Router>
+            </Router>
+          </TradingModeProvider>
         </WebSocketProvider>
-      </Provider>
-    );
-  }
-
-  console.log('🔍 App: User authenticated, rendering main application');
-  
-  return (
-    <Provider store={store}>
-      <WebSocketProvider>
-        <ErrorBoundary>
-          <Router>
-          <div className="App">
-            <ErrorBoundary>
-              <Sidebar />
-            </ErrorBoundary>
-            <div className="main-content">
-              <ErrorBoundary>
-                <Header />
-              </ErrorBoundary>
-              <ErrorBoundary>
-                <Routes>
-                  <Route 
-                    path="/" 
-                    element={
-                      <React.Fragment>
-                        {console.log('🔍 App: Rendering Dashboard route')}
-                        <Dashboard />
-                      </React.Fragment>
-                    } 
-                  />
-                  <Route 
-                    path="/trading" 
-                    element={
-                      <React.Fragment>
-                        {console.log('🔍 App: Rendering Trading route')}
-                        <Trading />
-                      </React.Fragment>
-                    } 
-                  />
-                  <Route 
-                    path="/portfolio" 
-                    element={
-                      <React.Fragment>
-                        {console.log('🔍 App: Rendering Portfolio route')}
-                        <Portfolio />
-                      </React.Fragment>
-                    } 
-                  />
-                  <Route 
-                    path="/charts" 
-                    element={
-                      <React.Fragment>
-                        {console.log('🔍 App: Rendering Charts route (redirecting to Trading)')}
-                        <Trading />
-                      </React.Fragment>
-                    } 
-                  />
-                  <Route 
-                    path="/analytics" 
-                    element={
-                      <React.Fragment>
-                        {console.log('🔍 App: Rendering Analytics route')}
-                        <Analytics />
-                      </React.Fragment>
-                    } 
-                  />
-                  <Route 
-                    path="/news" 
-                    element={
-                      <React.Fragment>
-                        {console.log('🔍 App: Rendering News route')}
-                        <News />
-                      </React.Fragment>
-                    } 
-                  />
-                  <Route 
-                    path="/settings" 
-                    element={
-                      <React.Fragment>
-                        {console.log('🔍 App: Rendering Settings route')}
-                        <Settings />
-                      </React.Fragment>
-                    } 
-                  />
-                  <Route 
-                    path="*" 
-                    element={
-                      <React.Fragment>
-                        {console.log('🔍 App: Rendering default redirect to Dashboard')}
-                        <Navigate to="/" replace />
-                      </React.Fragment>
-                    } 
-                  />
-                </Routes>
-              </ErrorBoundary>
-            </div>
-          </div>
-          <ToastContainer 
-            position="top-right"
-            autoClose={3000}
-            hideProgressBar={false}
-            newestOnTop={false}
-            closeOnClick
-            rtl={false}
-            pauseOnFocusLoss
-            draggable
-            pauseOnHover
-          />
-        </Router>
-        </ErrorBoundary>
-      </WebSocketProvider>
+      </AuthProvider>
     </Provider>
   );
 }

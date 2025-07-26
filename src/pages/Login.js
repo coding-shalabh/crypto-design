@@ -3,76 +3,76 @@ import { useNavigate } from 'react-router-dom';
 import './Login.css';
 
 const Login = () => {
-  console.log('🔍 Login: Page component initialized');
+  console.log(' Login: Page component initialized');
   
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
-  console.log('🔍 Login: Initial email:', email);
+  console.log(' Login: Initial email:', email);
   
   const [password, setPassword] = useState('');
-  console.log('🔍 Login: Initial password:', password);
+  console.log(' Login: Initial password:', password);
   
   const [isLoading, setIsLoading] = useState(false);
-  console.log('🔍 Login: Initial isLoading:', isLoading);
+  console.log(' Login: Initial isLoading:', isLoading);
   
   const [error, setError] = useState('');
-  console.log('🔍 Login: Initial error:', error);
+  console.log(' Login: Initial error:', error);
 
   const handleEmailChange = (e) => {
     const value = e.target.value;
-    console.log('🔍 Login: handleEmailChange called with:', value);
+    console.log(' Login: handleEmailChange called with:', value);
     setEmail(value);
-    console.log('🔍 Login: Updated email to:', value);
+    console.log(' Login: Updated email to:', value);
   };
 
   const handlePasswordChange = (e) => {
     const value = e.target.value;
-    console.log('🔍 Login: handlePasswordChange called with:', value);
+    console.log(' Login: handlePasswordChange called with:', value);
     setPassword(value);
-    console.log('🔍 Login: Updated password to:', value);
+    console.log(' Login: Updated password to:', value);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('🔍 Login: handleSubmit called');
+    console.log(' Login: handleSubmit called');
     
     if (!email || !password) {
-      console.log('🔍 Login: Validation failed - missing email or password');
+      console.log(' Login: Validation failed - missing email or password');
       setError('Please enter both email and password');
       return;
     }
 
-    console.log('🔍 Login: Starting login process');
+    console.log(' Login: Starting login process');
     setIsLoading(true);
-    console.log('🔍 Login: Set isLoading to true');
+    console.log(' Login: Set isLoading to true');
     setError('');
-    console.log('🔍 Login: Cleared error');
+    console.log(' Login: Cleared error');
 
     try {
       // For now, just simulate a login process
-      console.log('🔍 Login: Simulating login process');
+      console.log(' Login: Simulating login process');
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      console.log('🔍 Login: Login successful, navigating to dashboard');
+      console.log(' Login: Login successful, navigating to dashboard');
       navigate('/');
     } catch (error) {
-      console.error('🔍 Login: Login error:', error);
+      console.error(' Login: Login error:', error);
       setError('Login failed. Please try again.');
     } finally {
       setIsLoading(false);
-      console.log('🔍 Login: Set isLoading to false');
+      console.log(' Login: Set isLoading to false');
     }
   };
 
   const handleDemoLogin = () => {
-    console.log('🔍 Login: handleDemoLogin called');
-    console.log('🔍 Login: Navigating to dashboard for demo');
+    console.log(' Login: handleDemoLogin called');
+    console.log(' Login: Navigating to dashboard for demo');
     navigate('/');
   };
 
   // Debug logging for state changes
   React.useEffect(() => {
-    console.log('🔍 Login: State updated:', {
+    console.log(' Login: State updated:', {
       email,
       password: password ? '[HIDDEN]' : '',
       isLoading,

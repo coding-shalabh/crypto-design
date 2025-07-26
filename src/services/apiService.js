@@ -17,11 +17,7 @@ class ApiService {
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
     
-    console.log('🔧 API Service initialized:', {
-      baseUrl: this.baseUrl,
-      websocketUrl: this.websocketUrl,
-      analysisApiUrl: this.analysisApiUrl
-    });
+    // API Service initialized
   }
 
   /**
@@ -29,12 +25,12 @@ class ApiService {
    */
   async initializeWebSocket() {
     try {
-      console.log('🔌 Connecting to WebSocket:', this.websocketUrl);
+      // Connecting to WebSocket
       
       this.websocket = new WebSocket(this.websocketUrl);
       
       this.websocket.onopen = () => {
-        console.log(' WebSocket connected successfully');
+        // WebSocket connected
         this.reconnectAttempts = 0;
         if (this.reconnectInterval) {
           clearInterval(this.reconnectInterval);
@@ -45,7 +41,7 @@ class ApiService {
       this.websocket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          console.log('📥 WebSocket message received:', data.type);
+          // WebSocket message received
           
           // Call registered callbacks
           this.websocketCallbacks.forEach((callback, key) => {
@@ -65,7 +61,7 @@ class ApiService {
       };
       
       this.websocket.onclose = () => {
-        console.log('📴 WebSocket disconnected');
+        // WebSocket disconnected
         this.attemptReconnect();
       };
       
@@ -87,7 +83,7 @@ class ApiService {
     if (this.reconnectInterval) return;
     
     this.reconnectAttempts++;
-    console.log(`🔄 Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+    // Attempting to reconnect
     
     this.reconnectInterval = setTimeout(() => {
       this.reconnectInterval = null;
@@ -115,7 +111,7 @@ class ApiService {
   sendWebSocketMessage(message) {
     if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
       this.websocket.send(JSON.stringify(message));
-      console.log('📤 WebSocket message sent:', message.action || message.type);
+      // WebSocket message sent
       return true;
     } else {
       console.error('❌ WebSocket not connected');
@@ -137,7 +133,7 @@ class ApiService {
         ...options
       };
 
-      console.log(`📡 API Call: ${options.method || 'GET'} ${url}`);
+      // API Call
       
       const response = await fetch(url, config);
       
@@ -146,7 +142,7 @@ class ApiService {
       }
       
       const data = await response.json();
-      console.log(' API response received');
+      // API response received
       return data;
       
     } catch (error) {
@@ -161,7 +157,7 @@ class ApiService {
   async getAnalysis(symbol) {
     try {
       const url = `${this.analysisApiUrl}/api/analysis/${symbol}`;
-      console.log(`📊 Getting analysis for ${symbol} from:`, url);
+      // Getting analysis
       
       const response = await fetch(url);
       
@@ -170,7 +166,7 @@ class ApiService {
       }
       
       const data = await response.json();
-      console.log(' Analysis received:', data.final_recommendation?.action);
+      // Analysis received
       return data;
       
     } catch (error) {

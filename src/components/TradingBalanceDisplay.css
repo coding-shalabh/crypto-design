@@ -1,0 +1,252 @@
+/* Trading Balance Display */
+.trading-balance-display {
+  background: #2d2d2d;
+  border: 1px solid #404040;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  position: relative;
+}
+
+.balance-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.balance-icon {
+  color: #f0b90b;
+  font-size: 16px;
+}
+
+.balance-label {
+  color: #ccc;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.info-tooltip-container {
+  position: relative;
+  cursor: help;
+}
+
+.info-icon {
+  color: #888;
+  font-size: 14px;
+  transition: color 0.2s;
+}
+
+.info-icon:hover {
+  color: #f0b90b;
+}
+
+/* Tooltip Styles */
+.tooltip {
+  position: absolute;
+  bottom: 120%;
+  right: 0;
+  background: #1a1a1a;
+  border: 1px solid #f0b90b;
+  border-radius: 8px;
+  padding: 12px;
+  min-width: 280px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  animation: tooltipFadeIn 0.2s ease-out;
+}
+
+.tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  right: 12px;
+  border: 6px solid transparent;
+  border-top-color: #f0b90b;
+}
+
+.tooltip-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #333;
+}
+
+.tooltip-icon {
+  font-size: 16px;
+}
+
+.tooltip-title {
+  color: #f0b90b;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.tooltip-body {
+  color: #ccc;
+  font-size: 12px;
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+.tooltip-details {
+  border-top: 1px solid #333;
+  padding-top: 8px;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+
+.detail-row span:first-child {
+  color: #888;
+}
+
+.detail-row span:last-child {
+  color: #fff;
+  font-family: monospace;
+}
+
+.mode-indicator {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+
+.mode-indicator.live {
+  background: #ff4444;
+  color: #fff;
+}
+
+.mode-indicator.mock {
+  background: #4CAF50;
+  color: #fff;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Balance Amount Display */
+.balance-amount {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Courier New', monospace;
+}
+
+.amount {
+  color: #fff;
+  font-size: 20px;
+  font-weight: bold;
+}
+
+.currency {
+  color: #f0b90b;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.wallet-type {
+  font-size: 14px;
+  margin-left: auto;
+}
+
+.wallet-type.futures {
+  color: #ff6b6b;
+}
+
+.wallet-type.mock {
+  color: #4CAF50;
+}
+
+.wallet-type.spot {
+  color: #f0b90b;
+}
+
+/* Loading State */
+.loading-balance {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #888;
+}
+
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #333;
+  border-top: 2px solid #f0b90b;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Refresh Button */
+.refresh-balance {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #888;
+  cursor: pointer;
+  padding: 4px 6px;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.refresh-balance:hover:not(:disabled) {
+  border-color: #f0b90b;
+  color: #f0b90b;
+}
+
+.refresh-balance:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.refresh-icon {
+  display: inline-block;
+  transition: transform 0.2s;
+}
+
+.refresh-icon.spinning {
+  animation: spin 1s linear infinite;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .tooltip {
+    right: -100px;
+    min-width: 250px;
+  }
+  
+  .tooltip::after {
+    right: 112px;
+  }
+  
+  .amount {
+    font-size: 18px;
+  }
+}

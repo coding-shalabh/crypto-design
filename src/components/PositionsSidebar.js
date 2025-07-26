@@ -21,8 +21,8 @@ const PositionsSidebar = ({
   const reduxPrices = useMultipleSymbolPrices(positionSymbols);
   const binanceConnectionStatus = useBinanceConnectionStatus();
   
-  console.log('🔍 PositionsSidebar: Redux prices for positions:', reduxPrices);
-  console.log('🔍 PositionsSidebar: Binance connection status:', binanceConnectionStatus);
+  console.log(' PositionsSidebar: Redux prices for positions:', reduxPrices);
+  console.log(' PositionsSidebar: Binance connection status:', binanceConnectionStatus);
   const formatNumber = (num) => {
     if (num === null || num === undefined) return '0.00';
     return parseFloat(num).toLocaleString('en-US', {
@@ -45,26 +45,26 @@ const PositionsSidebar = ({
   const getCurrentPrice = (symbol, position) => {
     // First try Redux real-time price
     if (reduxPrices[symbol] && reduxPrices[symbol].price) {
-      console.log(`🔍 PositionsSidebar: Using Redux price for ${symbol}:`, reduxPrices[symbol].price);
+      console.log(` PositionsSidebar: Using Redux price for ${symbol}:`, reduxPrices[symbol].price);
       return reduxPrices[symbol].price;
     }
     
     // Fallback to currentPrices prop
     if (currentPrices[symbol]) {
-      console.log(`🔍 PositionsSidebar: Using prop price for ${symbol}:`, currentPrices[symbol].price);
+      console.log(` PositionsSidebar: Using prop price for ${symbol}:`, currentPrices[symbol].price);
       return currentPrices[symbol].price;
     }
 
     // Fallback to cryptoData
     for (let [id, crypto] of cryptoData) {
       if (crypto.symbol === symbol) {
-        console.log(`🔍 PositionsSidebar: Using cryptoData price for ${symbol}:`, crypto.current_price);
+        console.log(` PositionsSidebar: Using cryptoData price for ${symbol}:`, crypto.current_price);
         return crypto.current_price;
       }
     }
 
     // Last fallback to entry price
-    console.log(`🔍 PositionsSidebar: Using entry price for ${symbol}:`, position.avg_price || position.entry_price);
+    console.log(` PositionsSidebar: Using entry price for ${symbol}:`, position.avg_price || position.entry_price);
     return position.avg_price || position.entry_price;
   };
 
@@ -105,9 +105,16 @@ const PositionsSidebar = ({
                 <div className="position-header">
                   <div className="position-symbol">
                     <span className="symbol-name">{symbol}</span>
-                    <span className={`position-type ${isLong ? 'long' : 'short'}`}>
-                      {isLong ? 'LONG' : 'SHORT'}
-                    </span>
+                    <div className="position-tags">
+                      <span className={`position-type ${isLong ? 'long' : 'short'}`}>
+                        {isLong ? 'LONG' : 'SHORT'}
+                      </span>
+                      {(position.bot_trade || position.trade_type === 'bot') && (
+                        <span className="ai-tag" title="AI Bot Trade">
+                          🤖 AI
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <button
                     className="close-position-btn"
@@ -141,6 +148,52 @@ const PositionsSidebar = ({
                       )}
                     </span>
                   </div>
+                  
+                  {(position.bot_trade || position.trade_type === 'bot') && (
+                    <>
+                      {position.leverage && (
+                        <div className="position-row">
+                          <span className="label">Leverage:</span>
+                          <span className="value">{position.leverage}x</span>
+                        </div>
+                      )}
+                      
+                      {position.margin_used && (
+                        <div className="position-row">
+                          <span className="label">Margin Used:</span>
+                          <span className="value">${formatNumber(position.margin_used)}</span>
+                        </div>
+                      )}
+                      
+                      {(position.stop_loss || position.take_profit) && (
+                        <div className="position-row tp-sl-row">
+                          <span className="label">TP/SL:</span>
+                          <div className="tp-sl-values">
+                            {position.take_profit && (
+                              <span className="tp-value" title="Take Profit">
+                                TP: ${formatNumber(position.take_profit)}
+                                {position.old_take_profit && position.old_take_profit !== position.take_profit && (
+                                  <span className="old-value" title="Previous TP">
+                                    (was ${formatNumber(position.old_take_profit)})
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                            {position.stop_loss && (
+                              <span className="sl-value" title="Stop Loss">
+                                SL: ${formatNumber(position.stop_loss)}
+                                {position.old_stop_loss && position.old_stop_loss !== position.stop_loss && (
+                                  <span className="old-value" title="Previous SL">
+                                    (was ${formatNumber(position.old_stop_loss)})
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
                   
                   <div className="position-row">
                     <span className="label">P&L:</span>

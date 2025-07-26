@@ -25,25 +25,26 @@ import "./Trading.css";
 import { useNavigate } from "react-router-dom";
 
 const Trading = () => {
-  console.log('🔍 Trading: Page component initialized');
+  // Remove debug logging to prevent spam
+  // console.log(' Trading: Page component initialized');
   const navigate = useNavigate();
   const chartRef = useRef(null);
   const [selectedSymbol, setSelectedSymbol] = useState("BTCUSDT");
-  console.log('🔍 Trading: Initial selectedSymbol:', selectedSymbol);
+  // console.log(' Trading: Initial selectedSymbol:', selectedSymbol);
   const [currentPrice, setCurrentPrice] = useState(null);
-  console.log('🔍 Trading: Initial currentPrice:', currentPrice);
+  // console.log(' Trading: Initial currentPrice:', currentPrice);
   const [priceChange, setPriceChange] = useState(0);
-  console.log('🔍 Trading: Initial priceChange:', priceChange);
+  // console.log(' Trading: Initial priceChange:', priceChange);
   const [currentTimeframe, setCurrentTimeframe] = useState('1');
-  console.log('🔍 Trading: Initial currentTimeframe:', currentTimeframe);
+  // console.log(' Trading: Initial currentTimeframe:', currentTimeframe);
   const [activeTab, setActiveTab] = useState('chart'); // 'chart', 'info', 'trading-data', 'ai'
-  console.log('🔍 Trading: Initial activeTab:', activeTab);
+  // console.log(' Trading: Initial activeTab:', activeTab);
   const [showAIChat, setShowAIChat] = useState(false);
-  console.log('🔍 Trading: Initial showAIChat:', showAIChat);
+  // console.log(' Trading: Initial showAIChat:', showAIChat);
   const [isChangingSymbol, setIsChangingSymbol] = useState(false);
-  console.log('🔍 Trading: Initial isChangingSymbol:', isChangingSymbol);
+  // console.log(' Trading: Initial isChangingSymbol:', isChangingSymbol);
   const [isChangingTimeframe, setIsChangingTimeframe] = useState(false);
-  console.log('🔍 Trading: Initial isChangingTimeframe:', isChangingTimeframe);
+  // console.log(' Trading: Initial isChangingTimeframe:', isChangingTimeframe);
 
   // Use shared WebSocket connection for trading operations
   const {
@@ -57,58 +58,60 @@ const Trading = () => {
     getBotConfig,
     getPositions,
     closePosition,
-    sendMessage
+    sendMessage,
+    lastConnectionCheck,
+    connectionErrorDetails
   } = useWebSocket();
-  console.log('🔍 Trading: WebSocket context initialized:', { 
-    isConnected, 
-    dataKeys: Object.keys(data || {}),
-    executePaperTrade: !!executePaperTrade,
-    startBot: !!startBot,
-    stopBot: !!stopBot,
-    getBotStatus: !!getBotStatus,
-    updateBotConfig: !!updateBotConfig,
-    getBotConfig: !!getBotConfig,
-    getPositions: !!getPositions,
-    closePosition: !!closePosition,
-    sendMessage: !!sendMessage
-  });
+  // console.log(' Trading: WebSocket context initialized:', { 
+  //   isConnected, 
+  //   dataKeys: Object.keys(data || {}),
+  //   executePaperTrade: !!executePaperTrade,
+  //   startBot: !!startBot,
+  //   stopBot: !!stopBot,
+  //   getBotStatus: !!getBotStatus,
+  //   updateBotConfig: !!updateBotConfig,
+  //   getBotConfig: !!getBotConfig,
+  //   getPositions: !!getPositions,
+  //   closePosition: !!closePosition,
+  //   sendMessage: !!sendMessage
+  // });
 
   // Backend crypto data
   const {
     cryptoData
   } = useCryptoDataBackend();
-  console.log('🔍 Trading: Crypto data hook initialized:', { 
-    cryptoDataSize: cryptoData ? cryptoData.size : 0
-  });
+  // console.log(' Trading: Crypto data hook initialized:', { 
+  //   cryptoDataSize: cryptoData ? cryptoData.size : 0
+  // });
 
   // Request crypto data when component mounts
   useEffect(() => {
-    console.log('🔍 Trading: useEffect triggered - requesting crypto data');
+    // console.log(' Trading: useEffect triggered - requesting crypto data');
     if (isConnected) {
-      console.log('🔍 Trading: Requesting crypto data from backend...');
+      // console.log(' Trading: Requesting crypto data from backend...');
       // The useCryptoDataBackend hook should handle this, but let's make sure
       setTimeout(() => {
         if (isConnected) {
-          console.log('🔍 Trading: Ensuring crypto data is loaded...');
+          // console.log(' Trading: Ensuring crypto data is loaded...');
         }
       }, 2000);
     } else {
-      console.log('🔍 Trading: Not connected, skipping crypto data request');
+      // console.log(' Trading: Not connected, skipping crypto data request');
     }
   }, [isConnected]);
 
 
   // Update current price from WebSocket data or crypto data
   useEffect(() => {
-    console.log('🔍 Trading: useEffect triggered - updating current price from WebSocket data or crypto data');
+    // console.log(' Trading: useEffect triggered - updating current price from WebSocket data or crypto data');
     // First try to get from WebSocket price cache
     if (data.price_cache && data.price_cache[selectedSymbol]) {
       const priceData = data.price_cache[selectedSymbol];
-      console.log(`🔍 Trading: Updating price from WebSocket for ${selectedSymbol}: ${priceData.price}`);
+      // console.log(` Trading: Updating price from WebSocket for ${selectedSymbol}: ${priceData.price}`);
       setCurrentPrice(priceData.price);
       setPriceChange(priceData.change_24h);
     } else {
-      console.log(`🔍 Trading: No WebSocket price data for ${selectedSymbol}, trying crypto data`);
+      // console.log(` Trading: No WebSocket price data for ${selectedSymbol}, trying crypto data`);
       // Fallback to crypto data - try both full symbol and base symbol
       let crypto = Array.from(cryptoData.values()).find(
         c => c.symbol === selectedSymbol
@@ -117,50 +120,50 @@ const Trading = () => {
       // If not found, try base symbol (BTC for BTCUSDT)
       if (!crypto) {
         const baseSymbol = selectedSymbol.replace('USDT', '');
-        console.log(`🔍 Trading: Trying base symbol ${baseSymbol} for ${selectedSymbol}`);
+        // console.log(` Trading: Trying base symbol ${baseSymbol} for ${selectedSymbol}`);
         crypto = Array.from(cryptoData.values()).find(
           c => c.symbol === baseSymbol
         );
       }
       
       if (crypto) {
-        console.log(`🔍 Trading: Updating price from crypto data for ${selectedSymbol}: ${crypto.current_price}`);
+        // console.log(` Trading: Updating price from crypto data for ${selectedSymbol}: ${crypto.current_price}`);
         setCurrentPrice(crypto.current_price);
         setPriceChange(crypto.price_change_percentage_24h);
       } else {
-        console.log(`🔍 Trading: No price data available for ${selectedSymbol} from WebSocket or crypto data`);
-        console.log(`🔍 Trading: Available crypto symbols:`, Array.from(cryptoData.values()).map(c => c.symbol).slice(0, 10));
+        // console.log(` Trading: No price data available for ${selectedSymbol} from WebSocket or crypto data`);
+        // console.log(` Trading: Available crypto symbols:`, Array.from(cryptoData.values()).map(c => c.symbol).slice(0, 10));
       }
     }
   }, [data.price_cache, cryptoData, selectedSymbol]);
 
   // Real-time price updates from WebSocket
   useEffect(() => {
-    console.log('🔍 Trading: useEffect triggered - real-time price updates from WebSocket');
+    // console.log(' Trading: useEffect triggered - real-time price updates from WebSocket');
     if (data.price_cache && data.price_cache[selectedSymbol]) {
       const priceData = data.price_cache[selectedSymbol];
       // Only update if the price has actually changed
       if (priceData.price !== currentPrice) {
-        console.log(`🔍 Trading: Real-time price update for ${selectedSymbol}: ${priceData.price} (was: ${currentPrice})`);
+        // console.log(` Trading: Real-time price update for ${selectedSymbol}: ${priceData.price} (was: ${currentPrice})`);
         setCurrentPrice(priceData.price);
         setPriceChange(priceData.change_24h);
       } else {
-        console.log(`🔍 Trading: Price unchanged for ${selectedSymbol}: ${priceData.price}`);
+        // console.log(` Trading: Price unchanged for ${selectedSymbol}: ${priceData.price}`);
       }
     } else {
-      console.log(`🔍 Trading: No WebSocket price data available for ${selectedSymbol}`);
+      // console.log(` Trading: No WebSocket price data available for ${selectedSymbol}`);
     }
   }, [data.price_cache, selectedSymbol, currentPrice]);
 
   const handlePriceUpdate = (priceData) => {
-    console.log('🔍 Trading: handlePriceUpdate called with:', priceData);
+    // console.log(' Trading: handlePriceUpdate called with:', priceData);
     // Update current price from chart
     if (priceData && priceData.currentPrice) {
-      console.log(`🔍 Trading: Price update from chart: ${priceData.currentPrice}`);
+      // console.log(` Trading: Price update from chart: ${priceData.currentPrice}`);
       setCurrentPrice(priceData.currentPrice);
     }
     if (priceData && typeof priceData.priceChange === 'number') {
-      console.log(`🔍 Trading: Price change update from chart: ${priceData.priceChange}%`);
+      // console.log(` Trading: Price change update from chart: ${priceData.priceChange}%`);
       setPriceChange(priceData.priceChange);
     }
   };
@@ -168,64 +171,64 @@ const Trading = () => {
   // Update position markers when positions data changes
   useEffect(() => {
     if (chartRef.current && data.positions) {
-      console.log('🔍 Trading: Positions updated, calling updatePositionMarkers on chart');
+      // console.log(' Trading: Positions updated, calling updatePositionMarkers on chart');
       chartRef.current.updatePositionMarkers(data.positions);
     }
   }, [data.positions]);
 
   const handleBotControl = useCallback(async (action, config = {}) => {
-    console.log('🔍 Trading: handleBotControl called with action:', action, 'config:', config);
+    // console.log(' Trading: handleBotControl called with action:', action, 'config:', config);
     if (isConnected) {
-      console.log('🔍 Trading: Bot control - connected, executing action');
+      // console.log(' Trading: Bot control - connected, executing action');
       try {
         switch (action) {
           case 'start':
-            console.log('🔍 Trading: Starting bot with config:', config);
+            // console.log(' Trading: Starting bot with config:', config);
             await startBot(config);
             break;
           case 'stop':
-            console.log('🔍 Trading: Stopping bot');
+            // console.log(' Trading: Stopping bot');
             await stopBot();
             break;
           case 'status':
-            console.log('🔍 Trading: Getting bot status');
+            // console.log(' Trading: Getting bot status');
             await getBotStatus();
             break;
           case 'config':
-            console.log('🔍 Trading: Updating bot config:', config);
+            // console.log(' Trading: Updating bot config:', config);
             await updateBotConfig(config);
             break;
           default:
-            console.error("🔍 Trading: Unknown bot action:", action);
+            // console.error(" Trading: Unknown bot action:", action);
         }
       } catch (error) {
-        console.error("🔍 Trading: Error with bot control:", error);
+        // console.error(" Trading: Error with bot control:", error);
       }
     } else {
-      console.log('🔍 Trading: Bot control - not connected, skipping action');
+      // console.log(' Trading: Bot control - not connected, skipping action');
     }
   }, [isConnected, startBot, stopBot, getBotStatus, updateBotConfig]);
 
   const handleChartReady = (chart) => {
-    console.log("🔍 Trading: TradingView chart ready");
+    // console.log(" Trading: TradingView chart ready");
   };
 
   const handleSymbolChange = (newSymbol) => {
-    console.log('🔍 Trading: handleSymbolChange called with:', newSymbol);
+    // console.log(' Trading: handleSymbolChange called with:', newSymbol);
     if (newSymbol === selectedSymbol) {
-      console.log('🔍 Trading: Symbol unchanged, skipping update');
+      // console.log(' Trading: Symbol unchanged, skipping update');
       return; // Don't change if same symbol
     }
     
-    console.log(`🔍 Trading: Symbol changed from ${selectedSymbol} to ${newSymbol}`);
+    // console.log(` Trading: Symbol changed from ${selectedSymbol} to ${newSymbol}`);
     setIsChangingSymbol(true);
-    console.log('🔍 Trading: Set isChangingSymbol to true');
+    // console.log(' Trading: Set isChangingSymbol to true');
     setSelectedSymbol(newSymbol);
-    console.log('🔍 Trading: Updated selectedSymbol to:', newSymbol);
+    // console.log(' Trading: Updated selectedSymbol to:', newSymbol);
     
     // Reset loading state after a short delay
     setTimeout(() => {
-      console.log('🔍 Trading: Resetting isChangingSymbol to false');
+      // console.log(' Trading: Resetting isChangingSymbol to false');
       setIsChangingSymbol(false);
     }, 1000);
     
@@ -233,21 +236,21 @@ const Trading = () => {
   };
 
   const handleTimeframeChange = (timeframe) => {
-    console.log('🔍 Trading: handleTimeframeChange called with:', timeframe);
+    // console.log(' Trading: handleTimeframeChange called with:', timeframe);
     if (timeframe === currentTimeframe) {
-      console.log('🔍 Trading: Timeframe unchanged, skipping update');
+      // console.log(' Trading: Timeframe unchanged, skipping update');
       return; // Don't change if same timeframe
     }
     
-    console.log(`🔍 Trading: Timeframe changed from ${currentTimeframe} to ${timeframe}`);
+    // console.log(` Trading: Timeframe changed from ${currentTimeframe} to ${timeframe}`);
     setIsChangingTimeframe(true);
-    console.log('🔍 Trading: Set isChangingTimeframe to true');
+    // console.log(' Trading: Set isChangingTimeframe to true');
     setCurrentTimeframe(timeframe);
-    console.log('🔍 Trading: Updated currentTimeframe to:', timeframe);
+    // console.log(' Trading: Updated currentTimeframe to:', timeframe);
     
     // Reset loading state after a short delay
     setTimeout(() => {
-      console.log('🔍 Trading: Resetting isChangingTimeframe to false');
+      // console.log(' Trading: Resetting isChangingTimeframe to false');
       setIsChangingTimeframe(false);
     }, 500);
     
@@ -752,6 +755,7 @@ const Trading = () => {
           <TradingPanel
             isConnected={isConnected}
             data={data}
+            sendMessage={sendMessage}
             executePaperTrade={executePaperTrade}
             closePosition={closePosition}
             getPositions={getPositions}
@@ -795,6 +799,8 @@ const Trading = () => {
               getBotConfig={getBotConfig}
               sendMessage={sendMessage}
               data={data}
+              lastConnectionCheck={lastConnectionCheck}
+              connectionErrorDetails={connectionErrorDetails}
             />
           </div>
         </div>

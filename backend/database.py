@@ -22,6 +22,7 @@ class DatabaseManager:
         self.filter_logs_collection: Optional[Collection] = None # New collection for filter logs
         self.bot_state_collection: Optional[Collection] = None # New collection for bot state
         self.positions_collection: Optional[Collection] = None # New collection for positions
+        self.users_collection: Optional[Collection] = None # New collection for users
         self.setup_connection()
     
     def setup_connection(self):
@@ -33,6 +34,7 @@ class DatabaseManager:
             self.filter_logs_collection = self.db["filter_logs"] # Assign new collection
             self.bot_state_collection = self.db["bot_state"] # Assign bot state collection
             self.positions_collection = self.db["positions"] # Assign positions collection
+            self.users_collection = self.db["users"] # Assign users collection
             
             # Test connection
             self.client.admin.command('ping')
@@ -45,6 +47,8 @@ class DatabaseManager:
             self.filter_logs_collection.create_index([("symbol", 1), ("timestamp", -1)]) # Index for filter logs
             self.bot_state_collection.create_index([("user_id", 1)]) # Index for bot state
             self.positions_collection.create_index([("symbol", 1), ("user_id", 1)]) # Index for positions
+            self.users_collection.create_index([("username", 1)], unique=True) # Index for users
+            self.users_collection.create_index([("email", 1)], unique=True) # Email index
             
         except Exception as e:
             logger.warning(f" MongoDB not available: {e}")
@@ -55,6 +59,7 @@ class DatabaseManager:
             self.filter_logs_collection = None
             self.bot_state_collection = None
             self.positions_collection = None
+            self.users_collection = None
 
     async def log_trade(self, trade_data: Dict, user_id: int = 28) -> bool:
         """Log trade data to MongoDB"""
@@ -371,6 +376,112 @@ class DatabaseManager:
             logger.error(f"Error clearing positions from MongoDB: {e}")
             return False
     
+    # User management methods
+    async def create_user(self, user_data: Dict) -> Optional[str]:
+        """Create a new user"""
+        if self.users_collection is None:
+            logger.warning("MongoDB not available, cannot create user")
+            return None
+        
+        try:
+            result = self.users_collection.insert_one(user_data)
+            logger.info(f" User created with ID: {result.inserted_id}")
+            return result.inserted_id
+        except Exception as e:
+            logger.error(f" Error creating user: {e}")
+            return None
+    
+    async def find_user_by_username(self, username: str) -> Optional[Dict]:
+        """Find user by username"""
+        if self.users_collection is None:
+            return None
+        
+        try:
+            return self.users_collection.find_one({"username": username})
+        except Exception as e:
+            logger.error(f" Error finding user by username: {e}")
+            return None
+    
+    async def find_user_by_email(self, email: str) -> Optional[Dict]:
+        """Find user by email"""
+        if self.users_collection is None:
+            return None
+        
+        try:
+            return self.users_collection.find_one({"email": email})
+        except Exception as e:
+            logger.error(f" Error finding user by email: {e}")
+            return None
+    
+    async def find_user_by_id(self, user_id: str) -> Optional[Dict]:
+        """Find user by ID"""
+        if self.users_collection is None:
+            return None
+        
+        try:
+            from bson import ObjectId
+            return self.users_collection.find_one({"_id": ObjectId(user_id)})
+        except Exception as e:
+            logger.error(f" Error finding user by ID: {e}")
+            return None
+    
+    async def update_user_last_login(self, user_id) -> bool:
+        """Update user's last login timestamp"""
+        if self.users_collection is None:
+            return False
+        
+        try:
+            result = self.users_collection.update_one(
+                {"_id": user_id},
+                {"$set": {"last_login": datetime.utcnow()}}
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            logger.error(f" Error updating last login: {e}")
+            return False
+    
+    async def update_user_balance(self, user_id: str, new_balance: float) -> bool:
+        """Update user's portfolio balance"""
+        if self.users_collection is None:
+            return False
+        
+        try:
+            from bson import ObjectId
+            result = self.users_collection.update_one(
+                {"_id": ObjectId(user_id)},
+                {"$set": {"portfolio_balance": new_balance}}
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            logger.error(f" Error updating user balance: {e}")
+            return False
+    
+    async def update_user_trading_stats(self, user_id: str, pnl_change: float, is_winning_trade: bool) -> bool:
+        """Update user's trading statistics"""
+        if self.users_collection is None:
+            return False
+        
+        try:
+            from bson import ObjectId
+            update_data = {
+                "$inc": {
+                    "total_pnl": pnl_change,
+                    "total_trades": 1
+                }
+            }
+            
+            if is_winning_trade:
+                update_data["$inc"]["winning_trades"] = 1
+            
+            result = self.users_collection.update_one(
+                {"_id": ObjectId(user_id)},
+                update_data
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            logger.error(f" Error updating trading stats: {e}")
+            return False
+
     def close_connection(self):
         """Close MongoDB connection"""
         if self.client:

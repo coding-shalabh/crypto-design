@@ -1,0 +1,291 @@
+.trading-mode-toggle {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  background: rgba(19, 19, 19, 0.95);
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 12px 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  z-index: 1000;
+  min-width: 140px;
+}
+
+.toggle-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mode-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.live-icon {
+  color: #ff4444;
+  font-size: 16px;
+  animation: pulse 2s infinite;
+}
+
+.mock-icon {
+  color: #4CAF50;
+  font-size: 16px;
+}
+
+.mode-text {
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+
+.mode-text.live {
+  color: #ff4444;
+}
+
+.mode-text.mock {
+  color: #4CAF50;
+}
+
+.toggle-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.2s ease;
+}
+
+.toggle-button:hover:not(:disabled) {
+  transform: scale(1.1);
+}
+
+.toggle-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.toggle-icon {
+  font-size: 24px;
+  transition: color 0.3s ease;
+}
+
+.toggle-icon.live {
+  color: #ff4444;
+}
+
+.toggle-icon.mock {
+  color: #666;
+}
+
+.mode-description {
+  font-size: 10px;
+  color: #999;
+  text-align: center;
+  margin-top: 4px;
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #333;
+  border-top: 2px solid #ff8000;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.connection-status {
+  font-size: 9px;
+  text-align: center;
+  margin-top: 2px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.connection-status.success {
+  color: #4CAF50;
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.connection-status.error {
+  color: #f44336;
+  background: rgba(244, 67, 54, 0.1);
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Confirmation Modal */
+.confirmation-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.confirmation-modal {
+  background: #1e1e1e;
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.warning-icon {
+  color: #ff4444;
+  font-size: 24px;
+}
+
+.modal-header h3 {
+  color: #fff;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.modal-content p {
+  color: #ccc;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.warning-box {
+  background: rgba(255, 68, 68, 0.1);
+  border: 1px solid rgba(255, 68, 68, 0.3);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 16px 0;
+  color: #ffcccc;
+  font-size: 14px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.cancel-button {
+  background: #333;
+  color: #fff;
+  border: 1px solid #555;
+  border-radius: 6px;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s ease;
+}
+
+.cancel-button:hover {
+  background: #555;
+}
+
+.confirm-button {
+  background: #ff4444;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.2s ease;
+}
+
+.confirm-button:hover {
+  background: #cc3333;
+}
+
+/* Pulse animation for live indicator */
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .trading-mode-toggle {
+    bottom: 80px;
+    left: 16px;
+    padding: 10px 14px;
+    min-width: 120px;
+  }
+  
+  .mode-text {
+    font-size: 11px;
+  }
+  
+  .toggle-icon {
+    font-size: 20px;
+  }
+  
+  .confirmation-modal {
+    padding: 20px;
+    margin: 16px;
+  }
+  
+  .balance-button {
+    font-size: 16px;
+  }
+}
+
+/* Balance Button */
+.balance-button {
+  background: #2d2d2d;
+  border: 1px solid #444;
+  border-radius: 8px;
+  color: #f0b90b;
+  cursor: pointer;
+  padding: 8px;
+  font-size: 18px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.balance-button:hover {
+  background: #3d3d3d;
+  border-color: #f0b90b;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(240, 185, 11, 0.2);
+}
+
+.balance-button:active {
+  transform: translateY(0);
+}
+
+.wallet-icon {
+  transition: transform 0.2s ease;
+}
+
+.balance-button:hover .wallet-icon {
+  transform: scale(1.1);
+}

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useTradingMode } from '../contexts/TradingModeContext';
 import './AIAnalysis.css';
 
 const AIAnalysis = ({ isConnected, sendMessage, data, startBot, stopBot, getBotStatus, updateBotConfig }) => {
-  console.log('🔍 AIAnalysis: Component initialized with props:', { 
+  console.log(' AIAnalysis: Component initialized with props:', { 
     isConnected, 
     sendMessage: !!sendMessage,
     data: data ? Object.keys(data) : null,
@@ -12,10 +13,15 @@ const AIAnalysis = ({ isConnected, sendMessage, data, startBot, stopBot, getBotS
     updateBotConfig: !!updateBotConfig
   });
 
+  // Get global trading mode
+  const { isLiveMode } = useTradingMode();
+
   // State for all sections
   const [activeTab, setActiveTab] = useState('overview');
   const [botStatus, setBotStatus] = useState(null);
   const [tradeHistory, setTradeHistory] = useState([]);
+  const [mockTradeHistory, setMockTradeHistory] = useState([]);
+  const [realTradeHistory, setRealTradeHistory] = useState([]);
   const [analysisLogs, setAnalysisLogs] = useState([]);
   const [tradeLogs, setTradeLogs] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -27,7 +33,7 @@ const AIAnalysis = ({ isConnected, sendMessage, data, startBot, stopBot, getBotS
     { id: 'active-trades', label: 'Active Trades', icon: '⚡' },
     { id: 'pair-status', label: 'Pair Status', icon: '🔄' },
     { id: 'trade-history', label: 'Trade History', icon: '📜' },
-    { id: 'analysis-logs', label: 'Analysis Logs', icon: '🔍' },
+    { id: 'analysis-logs', label: 'Analysis Logs', icon: '' },
     { id: 'trade-logs', label: 'Trade Logs', icon: '📋' }
   ];
 
@@ -38,7 +44,7 @@ const AIAnalysis = ({ isConnected, sendMessage, data, startBot, stopBot, getBotS
       const interval = setInterval(requestAllData, 10000); // Update every 10 seconds
       return () => clearInterval(interval);
     }
-  }, [isConnected]);
+  }, [isConnected, isLiveMode]);
 
   // Request all required data
   const requestAllData = async () => {
@@ -53,8 +59,8 @@ const AIAnalysis = ({ isConnected, sendMessage, data, startBot, stopBot, getBotS
       // Request positions (active trades)
       sendMessage({ type: 'get_positions' });
 
-      // Request trade history from MongoDB
-      sendMessage({ type: 'get_trade_history', limit: 100 });
+      // Request trade history from MongoDB - with mode parameter
+      sendMessage({ type: 'get_trade_history', limit: 100, mode: isLiveMode ? 'live' : 'mock' });
 
       // Request analysis logs
       sendMessage({ type: 'get_analysis_logs', limit: 50 });
@@ -68,31 +74,42 @@ const AIAnalysis = ({ isConnected, sendMessage, data, startBot, stopBot, getBotS
     }
   };
 
+  // Update displayed trade history when global trading mode changes
+  useEffect(() => {
+    setTradeHistory(!isLiveMode ? mockTradeHistory : realTradeHistory);
+  }, [isLiveMode, mockTradeHistory, realTradeHistory]);
+
   // Listen for WebSocket messages
   useEffect(() => {
     const handleBotResponse = (messageData) => {
-      console.log('🔍 AIAnalysis: Received bot response:', messageData);
+      console.log(' AIAnalysis: Received bot response:', messageData);
       if (messageData.type === 'bot_status_response') {
         setBotStatus(messageData.data);
       }
     };
 
     const handleTradeHistoryResponse = (messageData) => {
-      console.log('🔍 AIAnalysis: Received trade history:', messageData);
+      console.log(' AIAnalysis: Received trade history:', messageData);
       if (messageData.type === 'trade_history_response') {
-        setTradeHistory(messageData.data.trades || []);
+        const trades = messageData.data.trades || [];
+        const mode = messageData.data.mode || 'unknown';
+        
+        // Update trade history based on current mode
+        if (mode === (isLiveMode ? 'live' : 'mock')) {
+          setTradeHistory(trades);
+        }
       }
     };
 
     const handleAnalysisLogsResponse = (messageData) => {
-      console.log('🔍 AIAnalysis: Received analysis logs:', messageData);
+      console.log(' AIAnalysis: Received analysis logs:', messageData);
       if (messageData.type === 'analysis_logs_response') {
         setAnalysisLogs(messageData.data.logs || []);
       }
     };
 
     const handleTradeLogsResponse = (messageData) => {
-      console.log('🔍 AIAnalysis: Received trade logs:', messageData);
+      console.log(' AIAnalysis: Received trade logs:', messageData);
       if (messageData.type === 'trade_logs_response') {
         setTradeLogs(messageData.data.logs || []);
       }
@@ -327,7 +344,7 @@ const AIAnalysis = ({ isConnected, sendMessage, data, startBot, stopBot, getBotS
               'idle': '⏳',
               'in_trade': '🔥',
               'cooldown': '❄️',
-              'analyzing': '🔍',
+              'analyzing': '',
               'no_selected': '⚫'
             };
 
@@ -362,7 +379,12 @@ const AIAnalysis = ({ isConnected, sendMessage, data, startBot, stopBot, getBotS
         <div className="section-header">
           <h3>📜 Trade History</h3>
           <div className="section-stats">
-            {tradeHistory.length} Trade{tradeHistory.length !== 1 ? 's' : ''}
+            <span className="mode-indicator">
+              {!isLiveMode ? '🧪 Mock' : '📈 Live'} Trading Mode
+            </span>
+            <span className="trade-count">
+              {tradeHistory.length} Trade{tradeHistory.length !== 1 ? 's' : ''}
+            </span>
           </div>
         </div>
 
@@ -370,6 +392,7 @@ const AIAnalysis = ({ isConnected, sendMessage, data, startBot, stopBot, getBotS
           <div className="trade-history-table">
             <div className="table-header">
               <div>Symbol</div>
+              <div>Type</div>
               <div>Direction</div>
               <div>Amount</div>
               <div>Price</div>
@@ -379,6 +402,15 @@ const AIAnalysis = ({ isConnected, sendMessage, data, startBot, stopBot, getBotS
             {tradeHistory.map((trade, index) => (
               <div key={index} className="table-row">
                 <div>{trade.symbol}</div>
+                <div className="trade-type">
+                  {trade.bot_trade || trade.trade_type === 'bot' ? 
+                    <span className="ai-tag">🤖 AI</span> : 
+                    <span className="manual-tag">👤 Manual</span>
+                  }
+                  {trade.failed && trade.reason && (
+                    <span className="failed-tag" title={trade.reason}>❌ Failed</span>
+                  )}
+                </div>
                 <div className={`direction ${trade.direction?.toLowerCase()}`}>
                   {trade.direction}
                 </div>
@@ -407,7 +439,7 @@ const AIAnalysis = ({ isConnected, sendMessage, data, startBot, stopBot, getBotS
     return (
       <div className="analysis-logs-section">
         <div className="section-header">
-          <h3>🔍 Analysis Logs</h3>
+          <h3> Analysis Logs</h3>
           <div className="section-stats">
             {analysisLogs.length} Log{analysisLogs.length !== 1 ? 's' : ''}
           </div>

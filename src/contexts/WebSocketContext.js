@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import apiService from '../services/apiService';
+import tradingService from '../services/tradingService';
 import { toast } from 'react-toastify';
 
 const WebSocketContext = createContext();
@@ -21,7 +22,6 @@ export const useWebSocketContext = () => {
 };
 
 export const WebSocketProvider = ({ children }) => {
-  console.log('🔍 WebSocketProvider: Component initialized');
   
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -49,6 +49,8 @@ export const WebSocketProvider = ({ children }) => {
     }
   });
   const [error, setError] = useState(null);
+  const [lastConnectionCheck, setLastConnectionCheck] = useState(null);
+  const [connectionErrorDetails, setConnectionErrorDetails] = useState(null);
   
   // Use centralized API service
   const apiServiceRef = useRef(apiService);
@@ -58,8 +60,8 @@ export const WebSocketProvider = ({ children }) => {
   const reconnectTimeoutRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
   const maxReconnectAttempts = 10;
-  const baseReconnectDelay = 1000; // 1 second
-  const maxReconnectDelay = 30000; // 30 seconds
+  const baseReconnectDelay = 20000; // 20 seconds as requested
+  const maxReconnectDelay = 60000; // 60 seconds max
   const isReconnectingRef = useRef(false);
   const messageQueueRef = useRef([]);
   const isManualCloseRef = useRef(false);
@@ -71,23 +73,19 @@ export const WebSocketProvider = ({ children }) => {
   const maxMissedHeartbeats = 3;
 
   const connect = useCallback(() => {
-    console.log('🔍 WebSocketProvider: connect() called');
     
     // Don't connect if already connected or connecting
     if (socketRef.current && 
         (socketRef.current.readyState === WebSocket.CONNECTING || 
          socketRef.current.readyState === WebSocket.OPEN)) {
-      console.log('🔍 WebSocketProvider: Already connected or connecting, skipping');
       return;
     }
     
     try {
-      console.log('🔍 WebSocketProvider: Creating new WebSocket connection');
       setConnectionStatus('connecting');
       
       // 🔧 FIXED: Create WebSocket with proper URL
       const wsUrl = process.env.REACT_APP_WS_URL || 'ws://localhost:8767';
-      console.log('🔍 WebSocketProvider: Connecting to:', wsUrl);
       
       const newSocket = new WebSocket(wsUrl);
       socketRef.current = newSocket;
@@ -96,30 +94,42 @@ export const WebSocketProvider = ({ children }) => {
       // 🔧 FIXED: Set connection timeout
       const connectionTimeout = setTimeout(() => {
         if (newSocket.readyState === WebSocket.CONNECTING) {
-          console.log('🔍 WebSocketProvider: Connection timeout');
+          // Connection timeout
           newSocket.close();
         }
       }, 10000); // 10 second timeout
       
       newSocket.onopen = (event) => {
-        console.log('🔍 WebSocketProvider: Connection opened', event);
+        // Connection opened successfully
         clearTimeout(connectionTimeout);
         setIsConnected(true);
         setConnectionStatus('connected');
         setError(null); // Clear any previous errors
+        setConnectionErrorDetails(null); // Clear error details
         reconnectAttemptsRef.current = 0;
         isReconnectingRef.current = false;
         
-        // Show success toast on connection
+        // 🔥 NEW: Clear any existing error toasts
+        toast.dismiss('connection-error');
+        toast.dismiss('reconnecting');
+        toast.dismiss('connection-failed');
+        
+        // Show success toast on connection restoration
         if (reconnectAttemptsRef.current > 0) {
-          toast.success('Connection restored successfully!', {
-            position: "top-right",
-            autoClose: 2000,
-            hideProgressBar: false,
-            closeOnClick: true,
-            pauseOnHover: true,
-            draggable: true,
-          });
+          toast.success(
+            <div>
+              <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>✅ Connection Restored</div>
+              <div>Successfully connected to backend server</div>
+            </div>,
+            {
+              position: "top-center",
+              autoClose: 3000,
+              hideProgressBar: false,
+              closeOnClick: true,
+              pauseOnHover: true,
+              draggable: true,
+            }
+          );
         }
         
         // 🔧 FIXED: Start heartbeat
@@ -130,35 +140,43 @@ export const WebSocketProvider = ({ children }) => {
       };
       
       newSocket.onmessage = (event) => {
+        let message;
         try {
-          const messageData = JSON.parse(event.data);
-          console.log('🔍 WebSocketProvider: Message received:', messageData.type);
+          message = JSON.parse(event.data);
+        } catch (e) {
+          console.error('[WebSocketContext] Failed to parse message:', event.data);
+          return;
+        }
+        // Remove debug logging to prevent spam
+        // console.log('[WebSocketContext] Received message:', message);
+          // Message received
           
           // 🔧 FIXED: Handle heartbeat responses
-          if (messageData.type === 'pong') {
+          if (message.type === 'pong') {
             handleHeartbeatResponse();
             return;
           }
           
-          setLastMessage(messageData);
+          setLastMessage(message);
           
           // 🔧 FIXED: Update data state based on message type
-          if (messageData.type === 'initial_data' && messageData.data) {
+          if (message.type === 'initial_data' && message.data) {
             setData(prevData => ({
               ...prevData,
-              ...messageData.data,
-              positions: messageData.data.positions || {},
-              paper_balance: messageData.data.paper_balance || prevData.paper_balance || 0,
+              ...message.data,
+              positions: message.data.positions || {},
+              paper_balance: message.data.paper_balance || prevData.paper_balance || 0,
               ai_analysis: prevData.ai_analysis || {},
               ai_opportunities: prevData.ai_opportunities || {}
             }));
-          } else if (messageData.type === 'crypto_data_response' && messageData.data) {
+          } else if (message.type === 'crypto_data_response' && message.data) {
             setData(prevData => ({
               ...prevData,
-              crypto_data: messageData.data
+              crypto_data: message.data
             }));
-          } else if (messageData.type === 'price_updates_batch' && messageData.data) {
-            const newPriceCache = messageData.data.updates.reduce((acc, update) => {
+          } else if (message.type === 'price_updates_batch' && message.data) {
+            const updates = message.data.updates || [];
+            const newPriceCache = updates.reduce((acc, update) => {
               acc[update.symbol] = update;
               return acc;
             }, {});
@@ -170,55 +188,58 @@ export const WebSocketProvider = ({ children }) => {
                 ...newPriceCache
               }
             }));
-          } else if (messageData.type === 'position_update' && messageData.data) {
+          } else if (message.type === 'position_update' && message.data) {
             setData(prevData => ({
               ...prevData,
-              positions: messageData.data.positions || {},
-              paper_balance: messageData.data.balance || prevData.paper_balance
+              positions: message.data.positions || {},
+              paper_balance: message.data.balance || prevData.paper_balance
             }));
-          } else if (messageData.type === 'positions_response' && messageData.data) {
+          } else if (message.type === 'positions_response' && message.data) {
             setData(prevData => ({
               ...prevData,
-              positions: messageData.data.positions || {},
-              paper_balance: messageData.data.balance || prevData.paper_balance
+              positions: message.data.positions || {},
+              paper_balance: message.data.balance || prevData.paper_balance
             }));
-          } else if (messageData.type === 'trade_executed' && messageData.data) {
+          } else if (message.type === 'trade_executed' && message.data) {
             setData(prevData => ({
               ...prevData,
-              positions: messageData.data.positions || prevData.positions,
-              paper_balance: messageData.data.new_balance || prevData.paper_balance
+              positions: message.data.positions || prevData.positions,
+              paper_balance: message.data.new_balance || prevData.paper_balance
             }));
-          } else if (messageData.type === 'recent_trades_update' && messageData.data) {
+          } else if (message.type === 'recent_trades_update' && message.data) {
+            const recentTrades = message.data.recent_trades || [];
             setData(prevData => ({
               ...prevData,
-              recent_trades: messageData.data.recent_trades || prevData.recent_trades
+              recent_trades: recentTrades
             }));
-          } else if (messageData.type === 'ai_analysis_response' && messageData.data) {
+          } else if (message.type === 'ai_analysis_response' && message.data) {
+            const symbol = message.data.symbol || 'unknown';
             setData(prevData => ({
               ...prevData,
               ai_analysis: {
                 ...prevData.ai_analysis,
-                [messageData.data.symbol]: messageData.data
+                [symbol]: message.data
               }
             }));
-          } else if (messageData.type === 'ai_opportunity_alert' && messageData.data) {
+          } else if (message.type === 'ai_opportunity_alert' && message.data) {
+            const symbol = message.data.symbol || 'unknown';
             setData(prevData => ({
               ...prevData,
               ai_opportunities: {
                 ...prevData.ai_opportunities,
-                [messageData.data.symbol]: messageData.data
+                [symbol]: message.data
               }
             }));
-          } else if (messageData.type === 'bot_status_response' && messageData.data) {
+          } else if (message.type === 'bot_status_response' && message.data) {
             setData(prevData => ({
               ...prevData,
               bot_status: {
                 ...prevData.bot_status,
-                ...messageData.data
+                ...message.data
               }
             }));
-          } else if (messageData.type === 'start_bot_response' && messageData.data) {
-            if (messageData.data.success) {
+          } else if (message.type === 'start_bot_response' && message.data) {
+            if (message.data.success) {
               setData(prevData => ({
                 ...prevData,
                 bot_status: {
@@ -227,8 +248,8 @@ export const WebSocketProvider = ({ children }) => {
                 }
               }));
             }
-          } else if (messageData.type === 'stop_bot_response' && messageData.data) {
-            if (messageData.data.success) {
+          } else if (message.type === 'stop_bot_response' && message.data) {
+            if (message.data.success) {
               setData(prevData => ({
                 ...prevData,
                 bot_status: {
@@ -237,6 +258,44 @@ export const WebSocketProvider = ({ children }) => {
                 }
               }));
             }
+          } else if (message.type === 'trading_balance' && message.data) {
+            // Only log important balance updates, not every message
+            console.log('[WebSocketContext] Balance updated for mode:', message.data.mode);
+            setData(prevData => ({
+              ...prevData,
+              trading_balance: message.data.balance,
+              trading_mode: message.data.mode
+            }));
+          } else if (message.type === 'all_trading_balances' && message.data) {
+            setData(prevData => ({
+              ...prevData,
+              all_trading_balances: message.data.balances,
+              trading_mode: message.data.mode
+            }));
+          } else if (message.type === 'order_placed' && message.data) {
+            // 🔥 NEW: Handle live order placement response
+            console.log('[WebSocketContext] Live order placed:', message.data);
+            if (message.data.success) {
+              // Show success message
+              if (window.showToast) {
+                window.showToast('success', `Live order placed successfully: ${message.data.message}`);
+              }
+              // Trigger balance refresh
+              if (sendMessage) {
+                sendMessage({ type: 'get_trading_balance' });
+              }
+            } else {
+              // Show error message
+              if (window.showToast) {
+                window.showToast('error', `Order placement failed: ${message.data.message}`);
+              }
+            }
+          } else if (message.type === 'trading_mode_updated' && message.data) {
+            // 🔥 NEW: Handle trading mode update response
+            console.log('[WebSocketContext] Trading mode updated:', message.data);
+            if (window.showToast) {
+              window.showToast('info', message.data.message);
+            }
           }
           
           // 🔧 DEPRECATED: AI analysis messages are now handled directly in the main context
@@ -244,67 +303,160 @@ export const WebSocketProvider = ({ children }) => {
           if (window.handleAIAnalysisResponse && 
               ['ai_analysis_response', 'all_ai_analysis_response', 'ai_opportunities_response', 
                'ai_opportunity_alert', 'analysis_status', 'analysis_status_response', 
-               'pending_trades_response', 'trade_accepted', 'trade_ready_alert', 'analysis_log'].includes(messageData.type)) {
+               'pending_trades_response', 'trade_accepted', 'trade_ready_alert', 'analysis_log'].includes(message.type)) {
             try {
-              window.handleAIAnalysisResponse(messageData);
+              window.handleAIAnalysisResponse(message);
             } catch (error) {
-              console.error('🔍 WebSocketProvider: Error in AI analysis handler:', error);
+              console.error('WebSocket: Error in AI analysis handler:', error);
             }
           }
           
           // 🔧 FIXED: Route bot messages to bot handler
           if (window.handleBotResponse && 
               ['bot_start_response', 'bot_stop_response', 'bot_status_response', 'bot_status_update', 
-               'bot_config_update_response', 'bot_trade_executed', 'bot_error'].includes(messageData.type)) {
+               'bot_config_update_response', 'bot_trade_executed', 'bot_error'].includes(message.type)) {
             try {
-              window.handleBotResponse(messageData);
+              window.handleBotResponse(message);
             } catch (error) {
-              console.error('🔍 WebSocketProvider: Error in bot handler:', error);
+              console.error('WebSocket: Error in bot handler:', error);
             }
           }
-        } catch (error) {
-          console.error('🔍 WebSocketProvider: Error parsing message:', error);
-        }
-      };
+          
+          // Route trading messages to trading service
+          if (['trading_mode_set', 'all_trading_balances', 'trading_order_placed', 
+               'portfolio_summary', 'trading_connection_test', 'categorized_balances', 'wallet_balances',
+               'wallet_transfer_result', 'transfer_history'].includes(message.type)) {
+            try {
+              tradingService.handleMessage(message);
+            } catch (error) {
+              console.error('WebSocket: Error in trading handler:', error);
+            }
+          }
+        };
       
       newSocket.onerror = (error) => {
-        console.error('🔍 WebSocketProvider: WebSocket error:', error);
+        console.error('WebSocket: WebSocket error:', error);
         clearTimeout(connectionTimeout);
         setConnectionStatus('error');
-        setError('WebSocket connection error');
         
-        // Show user-friendly toast notification instead of breaking the page
-        toast.error('Connection issue detected. Attempting to reconnect...', {
-          position: "top-right",
-          autoClose: 3000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-        });
+        // 🔥 NEW: Enhanced error handling with detailed information
+        const errorMessage = 'Backend connection failed';
+        const errorDetails = {
+          message: errorMessage,
+          timestamp: new Date().toISOString(),
+          error: error,
+          reconnectAttempts: reconnectAttemptsRef.current,
+          maxAttempts: maxReconnectAttempts
+        };
+        
+        setError(errorMessage);
+        setConnectionErrorDetails(errorDetails);
+        setLastConnectionCheck(new Date());
+        
+        // Show user-friendly error popup
+        toast.error(
+          <div>
+            <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>🔴 Connection Error</div>
+            <div>Backend server connection failed</div>
+            <div style={{ fontSize: '12px', marginTop: '5px', opacity: 0.8 }}>
+              Attempting to reconnect in 20 seconds...
+            </div>
+          </div>, 
+          {
+            position: "top-center",
+            autoClose: false, // Keep open until connection is restored
+            hideProgressBar: false,
+            closeOnClick: false,
+            pauseOnHover: true,
+            draggable: true,
+            toastId: 'connection-error', // Prevent multiple toasts
+          }
+        );
       };
       
       newSocket.onclose = (event) => {
-        console.log('🔍 WebSocketProvider: Connection closed:', {
-          code: event.code,
-          reason: event.reason,
-          wasClean: event.wasClean
-        });
-        
+        // Connection closed
         clearTimeout(connectionTimeout);
         setIsConnected(false);
         setConnectionStatus('disconnected');
-        setError(null); // Clear any previous errors
         stopHeartbeat();
+        
+        // 🔥 NEW: Enhanced close handling with detailed information
+        const closeDetails = {
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean,
+          timestamp: new Date().toISOString()
+        };
+        
+        console.log('WebSocket: Connection closed:', closeDetails);
         
         // 🔧 FIXED: Only reconnect if not manually closed and within attempt limits
         if (!isManualCloseRef.current && 
             reconnectAttemptsRef.current < maxReconnectAttempts && 
             !isReconnectingRef.current) {
+          
+          // Update error message based on close reason
+          let errorMessage = 'Backend connection lost';
+          if (event.code === 1006) {
+            errorMessage = 'Backend server is not responding';
+          } else if (event.code === 1015) {
+            errorMessage = 'Backend server certificate error';
+          }
+          
+          setError(errorMessage);
+          setConnectionErrorDetails({
+            ...closeDetails,
+            message: errorMessage,
+            reconnectAttempts: reconnectAttemptsRef.current,
+            maxAttempts: maxReconnectAttempts
+          });
+          setLastConnectionCheck(new Date());
+          
+          // Show reconnection message
+          toast.info(
+            <div>
+              <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>🔄 Reconnecting...</div>
+              <div>Attempt {reconnectAttemptsRef.current + 1} of {maxReconnectAttempts}</div>
+              <div style={{ fontSize: '12px', marginTop: '5px', opacity: 0.8 }}>
+                Next attempt in 20 seconds
+              </div>
+            </div>,
+            {
+              position: "top-center",
+              autoClose: false,
+              hideProgressBar: false,
+              closeOnClick: false,
+              pauseOnHover: true,
+              draggable: true,
+              toastId: 'reconnecting',
+            }
+          );
+          
           scheduleReconnect();
         } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-          console.log('🔍 WebSocketProvider: Max reconnection attempts reached');
+          // Max reconnection attempts reached
           setConnectionStatus('failed');
+          setError('Maximum reconnection attempts reached. Please refresh the page.');
+          
+          toast.error(
+            <div>
+              <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>❌ Connection Failed</div>
+              <div>Unable to connect to backend server</div>
+              <div style={{ fontSize: '12px', marginTop: '5px', opacity: 0.8 }}>
+                Please check if the server is running and refresh the page
+              </div>
+            </div>,
+            {
+              position: "top-center",
+              autoClose: false,
+              hideProgressBar: false,
+              closeOnClick: true,
+              pauseOnHover: true,
+              draggable: true,
+              toastId: 'connection-failed',
+            }
+          );
         }
         
         // Reset manual close flag
@@ -312,41 +464,66 @@ export const WebSocketProvider = ({ children }) => {
       };
       
     } catch (error) {
-      console.error('🔍 WebSocketProvider: Error creating WebSocket:', error);
+      console.error('WebSocket: Error creating WebSocket:', error);
       setConnectionStatus('error');
       scheduleReconnect();
     }
   }, []);
   
-  // 🔧 FIXED: Improved reconnection logic with exponential backoff
+  // 🔧 FIXED: Improved reconnection logic with 20-second intervals
   const scheduleReconnect = useCallback(() => {
     if (isReconnectingRef.current) {
-      console.log('🔍 WebSocketProvider: Already reconnecting, skipping');
+      console.log('WebSocket: Already reconnecting, skipping');
       return;
     }
     
     isReconnectingRef.current = true;
     reconnectAttemptsRef.current += 1;
     
-    // 🔧 FIXED: Exponential backoff with jitter
-    const delay = Math.min(
-      baseReconnectDelay * Math.pow(2, reconnectAttemptsRef.current - 1) + 
-      Math.random() * 1000, // Add jitter
-      maxReconnectDelay
-    );
+    // 🔥 NEW: Use 20-second intervals as requested
+    const delay = baseReconnectDelay; // Always 20 seconds
     
-    console.log(`🔍 WebSocketProvider: Scheduling reconnect attempt ${reconnectAttemptsRef.current} in ${delay}ms`);
+    console.log(` WebSocketProvider: Scheduling reconnect attempt ${reconnectAttemptsRef.current} in ${delay}ms`);
     setConnectionStatus('reconnecting');
     
+    // Update the reconnection toast with countdown
+    const updateReconnectionToast = () => {
+      const remainingTime = Math.max(0, Math.ceil((delay - (Date.now() - startTime)) / 1000));
+      if (remainingTime > 0) {
+        toast.info(
+          <div>
+            <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>🔄 Reconnecting...</div>
+            <div>Attempt {reconnectAttemptsRef.current} of {maxReconnectAttempts}</div>
+            <div style={{ fontSize: '12px', marginTop: '5px', opacity: 0.8 }}>
+              Next attempt in {remainingTime} seconds
+            </div>
+          </div>,
+          {
+            position: "top-center",
+            autoClose: false,
+            hideProgressBar: false,
+            closeOnClick: false,
+            pauseOnHover: true,
+            draggable: true,
+            toastId: 'reconnecting',
+          }
+        );
+      }
+    };
+    
+    const startTime = Date.now();
+    const countdownInterval = setInterval(updateReconnectionToast, 1000);
+    
     reconnectTimeoutRef.current = setTimeout(() => {
-      console.log(`🔍 WebSocketProvider: Reconnection attempt ${reconnectAttemptsRef.current}`);
+      clearInterval(countdownInterval);
+      console.log(` WebSocketProvider: Reconnection attempt ${reconnectAttemptsRef.current}`);
       connect();
     }, delay);
   }, [connect]);
   
   // 🔧 FIXED: Heartbeat mechanism to detect dead connections
   const startHeartbeat = useCallback(() => {
-    console.log('🔍 WebSocketProvider: Starting heartbeat');
+    // Debug: Starting heartbeat');
     stopHeartbeat(); // Clear any existing heartbeat
     
     heartbeatIntervalRef.current = setInterval(() => {
@@ -360,7 +537,7 @@ export const WebSocketProvider = ({ children }) => {
             
             // Check for missed heartbeats
             if (missedHeartbeatsRef.current >= maxMissedHeartbeats) {
-              console.log('🔍 WebSocketProvider: Too many missed heartbeats, closing connection');
+              // Debug: Too many missed heartbeats, closing connection');
               socketRef.current.close();
               return;
             }
@@ -368,7 +545,7 @@ export const WebSocketProvider = ({ children }) => {
             missedHeartbeatsRef.current += 1;
           }
         } catch (error) {
-          console.error('🔍 WebSocketProvider: Error sending heartbeat:', error);
+          console.error('WebSocket: Error sending heartbeat:', error);
         }
       }
     }, 30000); // Send heartbeat every 30 seconds
@@ -383,17 +560,17 @@ export const WebSocketProvider = ({ children }) => {
   }, []);
   
   const handleHeartbeatResponse = useCallback(() => {
-    console.log('🔍 WebSocketProvider: Heartbeat response received');
+    // Debug: Heartbeat response received');
     missedHeartbeatsRef.current = 0;
     lastHeartbeatRef.current = Date.now();
   }, []);
   
   // 🔧 FIXED: Queue messages when disconnected
   const sendMessage = useCallback((message) => {
-    console.log('🔍 WebSocketProvider: sendMessage called with:', message);
+    // Debug: sendMessage called with:', message);
     
     if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-      console.log('🔍 WebSocketProvider: Socket not ready, queueing message');
+      // Debug: Socket not ready, queueing message');
       messageQueueRef.current.push(message);
       
       // Try to reconnect if not already trying
@@ -405,11 +582,11 @@ export const WebSocketProvider = ({ children }) => {
     
     try {
       const messageStr = JSON.stringify(message);
-      console.log('🔍 WebSocketProvider: Sending message:', messageStr);
+      // Debug: Sending message:', messageStr);
       socketRef.current.send(messageStr);
       return true;
     } catch (error) {
-      console.error('🔍 WebSocketProvider: Error sending message:', error);
+      console.error('WebSocket: Error sending message:', error);
       // Queue the message for retry
       messageQueueRef.current.push(message);
       return false;
@@ -418,7 +595,7 @@ export const WebSocketProvider = ({ children }) => {
   
   // 🔧 FIXED: Send queued messages when connection is restored
   const sendQueuedMessages = useCallback(() => {
-    console.log(`🔍 WebSocketProvider: Sending ${messageQueueRef.current.length} queued messages`);
+    console.log(` WebSocketProvider: Sending ${messageQueueRef.current.length} queued messages`);
     
     const queue = [...messageQueueRef.current];
     messageQueueRef.current = [];
@@ -432,7 +609,7 @@ export const WebSocketProvider = ({ children }) => {
           messageQueueRef.current.push(message);
         }
       } catch (error) {
-        console.error('🔍 WebSocketProvider: Error sending queued message:', error);
+        console.error('WebSocket: Error sending queued message:', error);
         messageQueueRef.current.push(message);
       }
     });
@@ -440,7 +617,7 @@ export const WebSocketProvider = ({ children }) => {
   
   // 🔧 FIXED: Graceful disconnect
   const disconnect = useCallback(() => {
-    console.log('🔍 WebSocketProvider: Manual disconnect called');
+    // Debug: Manual disconnect called');
     isManualCloseRef.current = true;
     
     // Clear reconnection timer
@@ -466,12 +643,12 @@ export const WebSocketProvider = ({ children }) => {
   
   // 🔧 FIXED: Initialize connection on mount
   useEffect(() => {
-    console.log('🔍 WebSocketProvider: Component mounted, connecting...');
+    // Debug: Component mounted, connecting...');
     connect();
     
     // Cleanup on unmount
     return () => {
-      console.log('🔍 WebSocketProvider: Component unmounting, cleaning up...');
+      // Debug: Component unmounting, cleaning up...');
       disconnect();
     };
   }, [connect, disconnect]);
@@ -480,13 +657,13 @@ export const WebSocketProvider = ({ children }) => {
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        console.log('🔍 WebSocketProvider: Page became visible, checking connection');
+        // Debug: Page became visible, checking connection');
         // Check connection health when page becomes visible
         if (!isConnected && !isReconnectingRef.current) {
           connect();
         }
       } else {
-        console.log('🔍 WebSocketProvider: Page became hidden');
+        // Debug: Page became hidden');
         // Don't disconnect on hidden, but stop trying to reconnect aggressively
       }
     };
@@ -498,7 +675,7 @@ export const WebSocketProvider = ({ children }) => {
   // 🔧 FIXED: Handle network status changes
   useEffect(() => {
     const handleOnline = () => {
-      console.log('🔍 WebSocketProvider: Network came online, reconnecting...');
+      // Debug: Network came online, reconnecting...');
       if (!isConnected && !isReconnectingRef.current) {
         reconnectAttemptsRef.current = 0; // Reset attempts on network recovery
         connect();
@@ -506,7 +683,7 @@ export const WebSocketProvider = ({ children }) => {
     };
     
     const handleOffline = () => {
-      console.log('🔍 WebSocketProvider: Network went offline');
+      // Debug: Network went offline');
       setConnectionStatus('offline');
     };
     
@@ -534,7 +711,7 @@ export const WebSocketProvider = ({ children }) => {
         }
       } else if (!isManualCloseRef.current && !isReconnectingRef.current) {
         // Connection lost unexpectedly
-        console.log('🔍 WebSocketProvider: Health check detected connection loss');
+        // Debug: Health check detected connection loss');
         if (connectionStatus !== 'disconnected') {
           setConnectionStatus('disconnected');
           setIsConnected(false);
@@ -552,11 +729,11 @@ export const WebSocketProvider = ({ children }) => {
   
   // 🔧 FIXED: Debug logging for connection state changes
   useEffect(() => {
-    console.log('🔍 WebSocketProvider: Connection status changed to:', connectionStatus);
+    // Debug: Connection status changed to:', connectionStatus);
   }, [connectionStatus]);
   
   useEffect(() => {
-    console.log('🔍 WebSocketProvider: Connected status changed to:', isConnected);
+    // Debug: Connected status changed to:', isConnected);
   }, [isConnected]);
   
   // 🔧 FIXED: Memoized context value to prevent unnecessary re-renders
@@ -567,6 +744,8 @@ export const WebSocketProvider = ({ children }) => {
     lastMessage,
     data,
     error,
+    lastConnectionCheck,
+    connectionErrorDetails,
     sendMessage,
     connect,
     disconnect,
@@ -644,6 +823,8 @@ export const WebSocketProvider = ({ children }) => {
     lastMessage,
     data,
     error,
+    lastConnectionCheck,
+    connectionErrorDetails,
     sendMessage,
     connect,
     disconnect

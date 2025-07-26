@@ -153,7 +153,7 @@ const ProfessionalTradingLayout = () => {
         slippage_tolerance: 1.0
       };
 
-      console.log('🔍 Executing trade with tradeData:', tradeData);
+      console.log(' Executing trade with tradeData:', tradeData);
       
       // Use executePaperTrade function like working TradingPanel
       const result = await executePaperTrade(tradeData);
@@ -194,7 +194,7 @@ const ProfessionalTradingLayout = () => {
       // Use same logic as TradingPanel: simple percentage of available balance
       const maxQuantity = (accountBalance * percentage / 100) / currentPrice;
       
-      console.log('🔍 Percentage button clicked:', {
+      console.log(' Percentage button clicked:', {
         percentage,
         currentPrice,
         accountBalance,

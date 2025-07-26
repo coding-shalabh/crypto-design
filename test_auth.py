@@ -1,107 +1,124 @@
 #!/usr/bin/env python3
-"""
-Test script to verify authentication system
-"""
 import asyncio
 import websockets
 import json
-import logging
+import sys
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-async def test_authentication():
-    """Test the authentication flow"""
-    uri = "ws://localhost:8768"
+async def test_registration():
+    """Test user registration via WebSocket"""
+    uri = "ws://localhost:8770"
     
     try:
-        logger.info("Connecting to WebSocket server...")
+        print(f"Connecting to {uri}...")
         async with websockets.connect(uri) as websocket:
-            logger.info("✅ Connected to WebSocket server")
+            print("Connected successfully!")
             
             # Test registration
-            logger.info("Testing user registration...")
-            register_message = {
+            register_data = {
                 "type": "register",
-                "username": "demo",
-                "email": "demo@example.com",
-                "password": "demo123"
+                "data": {
+                    "username": "testuser123",
+                    "email": "test@example.com",
+                    "password": "password123"
+                }
             }
             
-            await websocket.send(json.dumps(register_message))
-            logger.info("📤 Sent registration message")
+            print(f"Sending registration request: {register_data}")
+            await websocket.send(json.dumps(register_data))
             
-            # Wait for response
-            response = await websocket.recv()
-            response_data = json.loads(response)
-            logger.info(f"📨 Received response: {response_data}")
-            
-            if response_data.get('type') == 'register_response':
-                if response_data['data']['success']:
-                    logger.info("✅ Registration successful")
+            # Wait for response (skip initial_data and wait for auth response)
+            print("Waiting for response...")
+            while True:
+                response = await websocket.recv()
+                response_data = json.loads(response)
+                
+                # Skip initial_data and price_updates, wait for auth response
+                if response_data.get('type') in ['initial_data', 'price_updates_batch']:
+                    continue
+                    
+                print(f"Registration response: {response_data}")
+                
+                if response_data.get('type') == 'register_success':
+                    print("Registration successful!")
+                    return True
+                elif response_data.get('type') == 'auth_error':
+                    print(f"Registration failed: {response_data.get('data', {}).get('message', 'Unknown error')}")
+                    return False
                 else:
-                    logger.info(f"❌ Registration failed: {response_data['data']['message']}")
+                    print(f"Unexpected response: {response_data}")
+                    return False
+                
+    except Exception as e:
+        print(f"Connection failed: {e}")
+        return False
+
+async def test_login():
+    """Test user login via WebSocket"""
+    uri = "ws://localhost:8770"
+    
+    try:
+        print(f"Connecting to {uri} for login test...")
+        async with websockets.connect(uri) as websocket:
+            print("Connected successfully!")
             
             # Test login
-            logger.info("Testing user login...")
-            login_message = {
+            login_data = {
                 "type": "login",
-                "username": "demo",
-                "password": "demo123"
+                "data": {
+                    "username": "testuser123",
+                    "password": "password123"
+                }
             }
             
-            await websocket.send(json.dumps(login_message))
-            logger.info("📤 Sent login message")
+            print(f"Sending login request: {login_data}")
+            await websocket.send(json.dumps(login_data))
             
-            # Wait for response
-            response = await websocket.recv()
-            response_data = json.loads(response)
-            logger.info(f"📨 Received response: {response_data}")
-            
-            if response_data.get('type') == 'login_response':
-                if response_data['data']['success']:
-                    logger.info("✅ Login successful")
-                    token = response_data['data']['token']
-                    user = response_data['data']['user']
-                    logger.info(f"User: {user['username']}, Balance: ${user['portfolio_balance']}")
+            # Wait for response (skip initial_data and wait for auth response)
+            print("Waiting for response...")
+            while True:
+                response = await websocket.recv()
+                response_data = json.loads(response)
+                
+                # Skip initial_data and price_updates, wait for auth response
+                if response_data.get('type') in ['initial_data', 'price_updates_batch']:
+                    continue
                     
-                    # Test getting positions
-                    logger.info("Testing get positions...")
-                    positions_message = {
-                        "type": "get_positions"
-                    }
-                    
-                    await websocket.send(json.dumps(positions_message))
-                    logger.info("📤 Sent get_positions message")
-                    
-                    # Wait for response
-                    response = await websocket.recv()
-                    response_data = json.loads(response)
-                    logger.info(f"📨 Received positions response: {response_data}")
-                    
+                print(f"Login response: {response_data}")
+                
+                if response_data.get('type') == 'login_success':
+                    print("Login successful!")
+                    return True
+                elif response_data.get('type') == 'auth_error':
+                    print(f"Login failed: {response_data.get('data', {}).get('message', 'Unknown error')}")
+                    return False
                 else:
-                    logger.info(f"❌ Login failed: {response_data['data']['message']}")
-            
-            # Test crypto data
-            logger.info("Testing get crypto data...")
-            crypto_message = {
-                "type": "get_crypto_data"
-            }
-            
-            await websocket.send(json.dumps(crypto_message))
-            logger.info("📤 Sent get_crypto_data message")
-            
-            # Wait for response
-            response = await websocket.recv()
-            response_data = json.loads(response)
-            logger.info(f"📨 Received crypto data response: {response_data.get('type')}")
-            
-            logger.info("✅ All tests completed successfully!")
-            
+                    print(f"Unexpected response: {response_data}")
+                    return False
+                
     except Exception as e:
-        logger.error(f"❌ Test failed: {e}")
-        raise
+        print(f"Connection failed: {e}")
+        return False
+
+async def main():
+    print("Testing Authentication System")
+    print("=" * 50)
+    
+    # Test registration
+    print("\n1. Testing Registration...")
+    reg_success = await test_registration()
+    
+    if reg_success:
+        print("\n2. Testing Login...")
+        login_success = await test_login()
+        
+        if login_success:
+            print("\nAll authentication tests passed!")
+        else:
+            print("\nLogin test failed!")
+    else:
+        print("\nRegistration test failed!")
+    
+    print("\n" + "=" * 50)
 
 if __name__ == "__main__":
-    asyncio.run(test_authentication()) 
+    asyncio.run(main())

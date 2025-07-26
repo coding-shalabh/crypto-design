@@ -163,7 +163,7 @@ const Charts = () => {
                     <span>Real-time price data</span>
                   </div>
                   <div className="feature">
-                    <span className="feature-icon">🔍</span>
+                    <span className="feature-icon"></span>
                     <span>Technical indicators</span>
                   </div>
                   <div className="feature">

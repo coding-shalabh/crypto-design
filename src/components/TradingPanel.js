@@ -10,6 +10,8 @@ import {
   FiPercent,
   FiClock
 } from 'react-icons/fi';
+import TradingBalanceDisplay from './TradingBalanceDisplay';
+import { useTradingMode } from '../contexts/TradingModeContext';
 import './TradingPanel.css';
 
 // 🔥 NEW: Import Redux hooks for real-time prices
@@ -23,6 +25,7 @@ import {
 const TradingPanel = ({ 
   isConnected, 
   data, 
+  sendMessage,
   executePaperTrade, 
   closePosition, 
   getPositions,
@@ -30,10 +33,11 @@ const TradingPanel = ({
   currentPrice = null,
   cryptoData = new Map()
 }) => {
-  console.log('🔍 TradingPanel: Component initialized with props:', { 
+  console.log(' TradingPanel: Component initialized with props:', { 
     currentSymbol, 
     currentPrice, 
     isConnected, 
+    sendMessage: !!sendMessage,
     data: Object.keys(data || {}).length,
     cryptoData: cryptoData ? cryptoData.size : 0
   });
@@ -44,7 +48,7 @@ const TradingPanel = ({
   const binanceConnectionStatus = useBinanceConnectionStatus();
   const priceUpdateStats = usePriceUpdateStats();
   
-  console.log('🔍 TradingPanel: Redux price data:', { 
+  console.log(' TradingPanel: Redux price data:', { 
     reduxPrice, 
     enhancedPrice, 
     binanceConnectionStatus, 
@@ -52,58 +56,75 @@ const TradingPanel = ({
   });
 
   const [activeTab, setActiveTab] = useState('buy');
-  console.log('🔍 TradingPanel: Initial activeTab:', activeTab);
+  console.log(' TradingPanel: Initial activeTab:', activeTab);
   const [amount, setAmount] = useState('');
-  console.log('🔍 TradingPanel: Initial amount:', amount);
+  console.log(' TradingPanel: Initial amount:', amount);
   const [orderType, setOrderType] = useState('limit');
-  console.log('🔍 TradingPanel: Initial orderType:', orderType);
+  console.log(' TradingPanel: Initial orderType:', orderType);
   const [leverage, setLeverage] = useState(10);
-  console.log('🔍 TradingPanel: Initial leverage:', leverage);
+  console.log(' TradingPanel: Initial leverage:', leverage);
   const [marginMode, setMarginMode] = useState('isolated');
-  console.log('🔍 TradingPanel: Initial marginMode:', marginMode);
+  console.log(' TradingPanel: Initial marginMode:', marginMode);
   const [price, setPrice] = useState('');
-  console.log('🔍 TradingPanel: Initial price:', price);
+  console.log(' TradingPanel: Initial price:', price);
   const [size, setSize] = useState('');
-  console.log('🔍 TradingPanel: Initial size:', size);
+  console.log(' TradingPanel: Initial size:', size);
   const [sizeUnit, setSizeUnit] = useState('USDT'); // Add size unit state
-  console.log('🔍 TradingPanel: Initial sizeUnit:', sizeUnit);
+  console.log(' TradingPanel: Initial sizeUnit:', sizeUnit);
   const [sizeSliderValue, setSizeSliderValue] = useState(0); // Add slider value state
-  console.log('🔍 TradingPanel: Initial sizeSliderValue:', sizeSliderValue);
+  console.log(' TradingPanel: Initial sizeSliderValue:', sizeSliderValue);
   const [useTpSl, setUseTpSl] = useState(false);
-  console.log('🔍 TradingPanel: Initial useTpSl:', useTpSl);
+  console.log(' TradingPanel: Initial useTpSl:', useTpSl);
   const [reduceOnly, setReduceOnly] = useState(false);
-  console.log('🔍 TradingPanel: Initial reduceOnly:', reduceOnly);
+  console.log(' TradingPanel: Initial reduceOnly:', reduceOnly);
   const [isExecuting, setIsExecuting] = useState(false);
-  console.log('🔍 TradingPanel: Initial isExecuting:', isExecuting);
+  console.log(' TradingPanel: Initial isExecuting:', isExecuting);
   const [lastTrade, setLastTrade] = useState(null);
-  console.log('🔍 TradingPanel: Initial lastTrade:', lastTrade);
+  console.log(' TradingPanel: Initial lastTrade:', lastTrade);
   const [lastTradeId, setLastTradeId] = useState(null); // Track last trade to prevent duplicates
-  console.log('🔍 TradingPanel: Initial lastTradeId:', lastTradeId);
+  console.log(' TradingPanel: Initial lastTradeId:', lastTradeId);
+  
+  // Get trading mode from global context
+  const { isLiveMode, tradingMode } = useTradingMode();
+  console.log(' TradingPanel: Current trading mode:', { isLiveMode, tradingMode });
 
   // Safely destructure data with defaults
-  const { paper_balance = 0, positions = {}, recent_trades = [] } = data || {};
-  console.log('🔍 TradingPanel: Current data structure:', { paper_balance, positions, recent_trades: recent_trades.length });
-  console.log('🔍 TradingPanel: Data from props:', { 
+  const { paper_balance = 0, trading_balance = null, positions = {}, recent_trades = [] } = data || {};
+  
+  // 🔥 NEW: Use live balance when in live mode, fallback to paper balance
+  const effectiveBalance = isLiveMode && trading_balance ? trading_balance.total : paper_balance;
+  
+  console.log(' TradingPanel: Current data structure:', { 
     paper_balance, 
+    trading_balance, 
+    effectiveBalance,
+    isLiveMode,
+    positions: Object.keys(positions).length, 
+    recent_trades: recent_trades.length 
+  });
+  console.log(' TradingPanel: Data from props:', { 
+    paper_balance, 
+    trading_balance,
+    effectiveBalance,
     positions: Object.keys(positions).length, 
     recent_trades: recent_trades.length 
   });
 
   // Calculate position info
   const currentPosition = positions[currentSymbol];
-  console.log('🔍 TradingPanel: Current position for', currentSymbol, ':', currentPosition);
+  console.log(' TradingPanel: Current position for', currentSymbol, ':', currentPosition);
 
   useEffect(() => {
     if (isConnected) {
       getPositions();
-      console.log('🔍 TradingPanel: getPositions called, isConnected:', isConnected);
+      console.log(' TradingPanel: getPositions called, isConnected:', isConnected);
     }
   }, [isConnected, getPositions]);
 
   // Request crypto data if not available
   useEffect(() => {
     if (isConnected && (!cryptoData || cryptoData.size === 0)) {
-      console.log('🔍 TradingPanel: No crypto data available, requesting from backend...');
+      console.log(' TradingPanel: No crypto data available, requesting from backend...');
       // We need to access the getCryptoData function from the parent
       // This will be handled by the useCryptoDataBackend hook
     }
@@ -117,20 +138,20 @@ const TradingPanel = ({
       // Use Redux real-time price first
       if (reduxPrice && reduxPrice.price) {
         foundPrice = reduxPrice.price;
-        console.log('🔍 TradingPanel: Setting market price from Redux:', foundPrice);
+        console.log(' TradingPanel: Setting market price from Redux:', foundPrice);
       } else if (currentPrice) {
         foundPrice = currentPrice;
-        console.log('🔍 TradingPanel: Setting market price from props:', foundPrice);
+        console.log(' TradingPanel: Setting market price from props:', foundPrice);
       } else if (data && data.price_cache && data.price_cache[currentSymbol]) {
         foundPrice = data.price_cache[currentSymbol].price;
-        console.log('🔍 TradingPanel: Setting market price from cache:', foundPrice);
+        console.log(' TradingPanel: Setting market price from cache:', foundPrice);
       } else if (cryptoData && cryptoData.size > 0) {
         const crypto = Array.from(cryptoData.values()).find(
           c => c.symbol === currentSymbol
         );
         if (crypto && crypto.current_price) {
           foundPrice = crypto.current_price;
-          console.log('🔍 TradingPanel: Setting market price from cryptoData:', foundPrice);
+          console.log(' TradingPanel: Setting market price from cryptoData:', foundPrice);
         }
       }
     } else {
@@ -146,7 +167,7 @@ const TradingPanel = ({
   useEffect(() => {
     if (size && parseFloat(size) > 0) {
       const currentPrice = getCurrentPrice();
-      const availableBalance = paper_balance || 100000;
+      const availableBalance = effectiveBalance || 100000;
       
       if (currentPrice && availableBalance > 0) {
         let percentage;
@@ -210,7 +231,7 @@ const TradingPanel = ({
       tradeValue = finalTradeAmount * effectivePrice;
     }
 
-    const availableBalance = paper_balance || 100000;
+    const availableBalance = effectiveBalance || 100000;
 
     if (activeTab === 'buy' && tradeValue > availableBalance) {
       window.alert('Insufficient balance!');
@@ -232,9 +253,26 @@ const TradingPanel = ({
         trade_type: activeTab === 'buy' ? 'LONG' : 'SHORT',
         margin_mode: marginMode,
         leverage: leverage,
+        trading_mode: tradingMode, // 🔥 NEW: Include trading mode
       };
 
-      await executePaperTrade(tradeData);
+      // 🔥 NEW: Use live trading when in live mode
+      if (isLiveMode && sendMessage) {
+        // Send live trading message
+        sendMessage({
+          type: 'place_order',
+          data: {
+            ...tradeData,
+            mode: 'live'
+          }
+        });
+        
+        // Note: Response will be handled by WebSocket context
+        // The order_placed response will trigger balance updates
+      } else {
+        // Use paper trading
+        await executePaperTrade(tradeData);
+      }
 
       setTimeout(() => {
         if (isConnected) {
@@ -269,7 +307,7 @@ const TradingPanel = ({
     try {
       await closePosition(symbol);
     } catch (error) {
-      console.error('🔍 TradingPanel: Failed to close position:', error);
+      console.error(' TradingPanel: Failed to close position:', error);
     }
   };
 
@@ -390,19 +428,19 @@ const TradingPanel = ({
   const getCurrentPrice = () => {
     // First try Redux real-time price
     if (reduxPrice && reduxPrice.price) {
-      console.log('🔍 TradingPanel: Using Redux real-time price:', reduxPrice.price);
+      console.log(' TradingPanel: Using Redux real-time price:', reduxPrice.price);
       return reduxPrice.price;
     }
     
     // Fallback to prop-based currentPrice
     if (currentPrice) {
-      console.log('🔍 TradingPanel: Using prop currentPrice:', currentPrice);
+      console.log(' TradingPanel: Using prop currentPrice:', currentPrice);
       return currentPrice;
     }
     
     // Fallback to data price cache
     if (data && data.price_cache && data.price_cache[currentSymbol]) {
-      console.log('🔍 TradingPanel: Using data price cache:', data.price_cache[currentSymbol].price);
+      console.log(' TradingPanel: Using data price cache:', data.price_cache[currentSymbol].price);
       return data.price_cache[currentSymbol].price;
     }
     
@@ -410,7 +448,7 @@ const TradingPanel = ({
     if (data && data.price_cache) {
       const baseSymbol = currentSymbol.replace('USDT', '');
       if (data.price_cache[baseSymbol]) {
-        console.log('🔍 TradingPanel: Using base symbol price cache:', data.price_cache[baseSymbol].price);
+        console.log(' TradingPanel: Using base symbol price cache:', data.price_cache[baseSymbol].price);
         return data.price_cache[baseSymbol].price;
       }
     }
@@ -421,28 +459,28 @@ const TradingPanel = ({
         c => c.symbol === currentSymbol
       );
       if (crypto && crypto.current_price) {
-        console.log('🔍 TradingPanel: Using cryptoData price:', crypto.current_price);
+        console.log(' TradingPanel: Using cryptoData price:', crypto.current_price);
         return crypto.current_price;
       }
     }
     
-    console.log('🔍 TradingPanel: No price found for symbol:', currentSymbol);
+    console.log(' TradingPanel: No price found for symbol:', currentSymbol);
     return null;
   };
 
   // Get max available amount for current unit
   const getMaxAmount = () => {
     const currentPrice = getCurrentPrice();
-    const availableBalance = paper_balance || 100000;
+    const availableBalance = effectiveBalance || 100000;
     
     if (!currentPrice || availableBalance <= 0) return 0;
     
     // Apply margin mode logic
-    let effectiveBalance = availableBalance;
+    let maxBalance = availableBalance;
     
     if (marginMode === 'isolated') {
       // In isolated mode, we can use the full balance for this position
-      effectiveBalance = availableBalance;
+      maxBalance = availableBalance;
     } else {
       // In cross mode, we need to consider existing positions
       const totalPositionValue = Object.values(positions).reduce((total, pos) => {
@@ -450,13 +488,13 @@ const TradingPanel = ({
       }, 0);
       
       // Reserve some balance for other positions in cross mode
-      effectiveBalance = availableBalance - (totalPositionValue * 0.1); // Reserve 10% for safety
+      maxBalance = availableBalance - (totalPositionValue * 0.1); // Reserve 10% for safety
     }
     
     if (sizeUnit === 'USDT') {
-      return Math.max(0, effectiveBalance);
+      return Math.max(0, maxBalance);
     } else {
-      return Math.max(0, effectiveBalance / currentPrice);
+      return Math.max(0, maxBalance / currentPrice);
     }
   };
 
@@ -485,7 +523,7 @@ const TradingPanel = ({
   // Debug logging for state changes
   useEffect(() => {
     const tradeValue = currentPrice && size ? currentPrice * parseFloat(size) : 0;
-    console.log('🔍 TradingPanel: State updated:', {
+    console.log(' TradingPanel: State updated:', {
       activeTab,
       amount,
       orderType,
@@ -501,15 +539,18 @@ const TradingPanel = ({
       currentPrice,
       currentSymbol,
       paper_balance,
+      trading_balance,
+      effectiveBalance,
+      isLiveMode,
       positions: Object.keys(positions || {}).length,
       currentPosition,
       tradeValue,
-      hasEnoughBalance: currentPrice && size ? currentPrice * parseFloat(size) <= paper_balance : false,
+      hasEnoughBalance: currentPrice && size ? currentPrice * parseFloat(size) <= effectiveBalance : false,
       hasPosition: currentPosition ? Math.abs(currentPosition.amount) > 0 : false,
       lastTrade,
       lastTradeId
     });
-  }, [activeTab, amount, orderType, leverage, marginMode, price, size, sizeUnit, sizeSliderValue, useTpSl, reduceOnly, isExecuting, currentPrice, currentSymbol, paper_balance, positions, currentPosition]);
+  }, [activeTab, amount, orderType, leverage, marginMode, price, size, sizeUnit, sizeSliderValue, useTpSl, reduceOnly, isExecuting, currentPrice, currentSymbol, paper_balance, trading_balance, effectiveBalance, isLiveMode, positions, currentPosition]);
 
   // Handle order type change
   const handleOrderTypeChange = (newOrderType) => {
@@ -518,20 +559,20 @@ const TradingPanel = ({
     if (newOrderType === 'market') {
       if (currentPrice && typeof currentPrice === 'number' && !isNaN(currentPrice)) {
         setPrice(currentPrice.toFixed(2));
-        console.log('🔍 TradingPanel: Setting market price from currentPrice:', currentPrice.toFixed(2));
+        console.log(' TradingPanel: Setting market price from currentPrice:', currentPrice.toFixed(2));
       } else if (cryptoData && cryptoData.size > 0) {
         const crypto = Array.from(cryptoData.values()).find(
           c => c.symbol === currentSymbol
         );
         if (crypto && crypto.current_price && typeof crypto.current_price === 'number' && !isNaN(crypto.current_price)) {
           setPrice(crypto.current_price.toFixed(2));
-          console.log('🔍 TradingPanel: Setting market price from crypto data:', crypto.current_price.toFixed(2));
+          console.log(' TradingPanel: Setting market price from crypto data:', crypto.current_price.toFixed(2));
         }
       } else if (data && data.price_cache && data.price_cache[currentSymbol]) {
         const price = data.price_cache[currentSymbol].price;
         if (typeof price === 'number' && !isNaN(price)) {
           setPrice(price.toFixed(2));
-          console.log('🔍 TradingPanel: Setting market price from WebSocket price cache:', price.toFixed(2));
+          console.log(' TradingPanel: Setting market price from WebSocket price cache:', price.toFixed(2));
         }
       } else if (data && data.price_cache) {
         const baseSymbol = currentSymbol.replace('USDT', '');
@@ -539,7 +580,7 @@ const TradingPanel = ({
           const price = data.price_cache[baseSymbol].price;
           if (typeof price === 'number' && !isNaN(price)) {
             setPrice(price.toFixed(2));
-            console.log('🔍 TradingPanel: Setting market price from base symbol price cache:', baseSymbol, price.toFixed(2));
+            console.log(' TradingPanel: Setting market price from base symbol price cache:', baseSymbol, price.toFixed(2));
           }
         }
       }
@@ -587,19 +628,19 @@ const TradingPanel = ({
       </div>
 
       {/* Available Balance and Margin Info */}
-      <div className="balance-section">
-        <div className="balance-info">
-          <span className="balance-label">Available Balance</span>
-          <span className="balance-amount">{paper_balance?.toLocaleString() || '0'} USDT</span>
-        </div>
-        <div className="margin-info">
-          <span className="margin-mode-indicator">
-            {marginMode === 'isolated' ? <FiLock size={12} /> : <FiLink size={12} />} {marginMode.charAt(0).toUpperCase() + marginMode.slice(1)} Margin
-          </span>
-          <span className="leverage-indicator">
-                          <FiZap size={12} /> {leverage}x Leverage
-          </span>
-        </div>
+      <TradingBalanceDisplay 
+        mode={tradingMode} 
+        isConnected={isConnected}
+        sendMessage={sendMessage}
+        data={data}
+      />
+      <div className="margin-info">
+        <span className="margin-mode-indicator">
+          {marginMode === 'isolated' ? <FiLock size={12} /> : <FiLink size={12} />} {marginMode.charAt(0).toUpperCase() + marginMode.slice(1)} Margin
+        </span>
+        <span className="leverage-indicator">
+          <FiZap size={12} /> {leverage}x Leverage
+        </span>
       </div>
 
       {/* Order Type */}

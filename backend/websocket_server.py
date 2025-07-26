@@ -20,6 +20,8 @@ from news_analysis import NewsAnalysisManager
 from ai_analysis import AIAnalysisManager
 from trading_bot import TradingBot
 from trade_execution import TradeExecutionManager
+from auth import AuthManager
+from trading_manager import TradingManager
 from bson import ObjectId
 
 def safe_json_serialize(obj):
@@ -58,6 +60,8 @@ class TradingServer:
         self.ai_analysis = AIAnalysisManager()
         self.trading_bot = TradingBot()
         self.trade_execution = TradeExecutionManager(self.db)
+        self.auth_manager = AuthManager()
+        self.trading_manager = TradingManager()
         
         # Use WeakSet for automatic cleanup of dead connections
         self.clients = weakref.WeakSet()
@@ -465,11 +469,87 @@ class TradingServer:
                         'data': {'message': result['message']}
                     })
                     
+            elif message_type == 'set_trading_mode':
+                # 🔥 NEW: Set global trading mode
+                mode = data.get('mode', 'mock')
+                self.trading_manager.set_trading_mode(mode)
+                logger.info(f"Global trading mode set to: {mode}")
+                
+                await self.safe_send(websocket, {
+                    'type': 'trading_mode_updated',
+                    'data': {
+                        'mode': mode,
+                        'message': f'Trading mode set to {mode}'
+                    }
+                })
+                
+            elif message_type == 'place_order':
+                # 🔥 NEW: Handle live trading orders
+                order_data = data.get('data', {})
+                trading_mode = order_data.get('trading_mode', 'mock')
+                
+                # Set trading mode in trading manager
+                self.trading_manager.set_trading_mode(trading_mode)
+                
+                try:
+                    # Extract order parameters
+                    symbol = order_data.get('symbol')
+                    direction = order_data.get('direction')  # 'buy' or 'sell'
+                    amount = order_data.get('amount')
+                    order_type = order_data.get('order_type', 'MARKET')
+                    price = order_data.get('price')
+                    
+                    if not all([symbol, direction, amount]):
+                        await self.safe_send(websocket, {
+                            'type': 'error',
+                            'data': {'message': 'Missing required order parameters'}
+                        })
+                        return
+                    
+                    # Place the order using trading manager
+                    result = self.trading_manager.place_order(
+                        symbol=symbol,
+                        side=direction.upper(),
+                        order_type=order_type,
+                        quantity=amount,
+                        price=price
+                    )
+                    
+                    if result.get('success'):
+                        logger.info(f"Live order placed successfully: {symbol} {direction} {amount}")
+                        
+                        # Send success response
+                        await self.safe_send(websocket, {
+                            'type': 'order_placed',
+                            'data': {
+                                'success': True,
+                                'order': result.get('order', {}),
+                                'message': f'{trading_mode.capitalize()} order placed successfully'
+                            }
+                        })
+                        
+                        # Update balance and positions
+                        await self.send_initial_data(websocket)
+                        
+                    else:
+                        logger.error(f"Order placement failed: {result.get('message', 'Unknown error')}")
+                        await self.safe_send(websocket, {
+                            'type': 'error',
+                            'data': {'message': f'Order placement failed: {result.get("message", "Unknown error")}'}
+                        })
+                        
+                except Exception as e:
+                    logger.error(f"Error placing order: {e}")
+                    await self.safe_send(websocket, {
+                        'type': 'error',
+                        'data': {'message': f'Error placing order: {str(e)}'}
+                    })
+                    
             elif message_type == 'start_bot':
                 bot_config = data.get('config', {})
                 result = await self.trading_bot.start_bot(bot_config)
                 await self.safe_send(websocket, {
-                    'type': 'bot_start_response',
+                    'type': 'start_bot_response',
                     'data': result
                 })
                 
@@ -507,7 +587,7 @@ class TradingServer:
             elif message_type == 'stop_bot':
                 result = await self.trading_bot.stop_bot()
                 await self.safe_send(websocket, {
-                    'type': 'bot_stop_response',
+                    'type': 'stop_bot_response',
                     'data': result
                 })
                 
@@ -611,6 +691,14 @@ class TradingServer:
                 # Add config and active trades to status response
                 bot_status['config'] = self.trading_bot.bot_config
                 bot_status['active_trades'] = list(self.trading_bot.bot_active_trades.values())
+                
+                # 🔥 NEW: Add trading balance based on current mode
+                try:
+                    trading_balance = self.trading_manager.get_trading_balance('USDT')
+                    bot_status['trading_balance'] = trading_balance
+                except Exception as e:
+                    logger.error(f"Failed to get trading balance in bot status: {e}")
+                    bot_status['trading_balance'] = None
                 
                 await self.safe_send(websocket, {
                     'type': 'bot_status_response',
@@ -938,6 +1026,354 @@ class TradingServer:
                     })
             
             # Add more message handlers here...
+            # Authentication handlers
+            elif message_type == 'register':
+                try:
+                    logger.info(f"Registration request data: {data}")
+                    
+                    # Extract data from nested structure
+                    auth_data = data.get('data', {})
+                    username = auth_data.get('username')
+                    email = auth_data.get('email')
+                    password = auth_data.get('password')
+                    
+                    logger.info(f"Parsed values: username='{username}', email='{email}', password='{password}'")
+                    
+                    if not all([username, email, password]):
+                        logger.warning(f"Missing required fields: username={bool(username)}, email={bool(email)}, password={bool(password)}")
+                        await self.safe_send(websocket, {
+                            'type': 'auth_error',
+                            'data': {'message': 'Username, email, and password are required'}
+                        })
+                        return
+                    
+                    result = await self.auth_manager.register_user(username, email, password)
+                    
+                    if result['success']:
+                        await self.safe_send(websocket, {
+                            'type': 'register_success',
+                            'data': result
+                        })
+                    else:
+                        await self.safe_send(websocket, {
+                            'type': 'auth_error',
+                            'data': {'message': result['message']}
+                        })
+                        
+                except Exception as e:
+                    logger.error(f"Registration error: {e}")
+                    await self.safe_send(websocket, {
+                        'type': 'auth_error',
+                        'data': {'message': 'Registration failed'}
+                    })
+            
+            elif message_type == 'login':
+                try:
+                    # Extract data from nested structure
+                    auth_data = data.get('data', {})
+                    username = auth_data.get('username')
+                    password = auth_data.get('password')
+                    
+                    logger.info(f"Login request: username='{username}', password_length={len(password) if password else 0}")
+                    
+                    if not all([username, password]):
+                        await self.safe_send(websocket, {
+                            'type': 'auth_error',
+                            'data': {'message': 'Username and password are required'}
+                        })
+                        return
+                    
+                    result = await self.auth_manager.login_user(username, password)
+                    
+                    if result['success']:
+                        await self.safe_send(websocket, {
+                            'type': 'login_success',
+                            'data': result
+                        })
+                    else:
+                        await self.safe_send(websocket, {
+                            'type': 'auth_error',
+                            'data': {'message': result['message']}
+                        })
+                        
+                except Exception as e:
+                    logger.error(f"Login error: {e}")
+                    await self.safe_send(websocket, {
+                        'type': 'auth_error',
+                        'data': {'message': 'Login failed'}
+                    })
+            
+            elif message_type == 'verify_token':
+                try:
+                    token = data.get('token')
+                    
+                    if not token:
+                        await self.safe_send(websocket, {
+                            'type': 'auth_error',
+                            'data': {'message': 'Token is required'}
+                        })
+                        return
+                    
+                    user_id = self.auth_manager.verify_token(token)
+                    
+                    if user_id:
+                        user_profile = await self.auth_manager.get_user_profile(user_id)
+                        if user_profile:
+                            await self.safe_send(websocket, {
+                                'type': 'token_valid',
+                                'data': {'user': user_profile}
+                            })
+                        else:
+                            await self.safe_send(websocket, {
+                                'type': 'auth_error',
+                                'data': {'message': 'User not found'}
+                            })
+                    else:
+                        await self.safe_send(websocket, {
+                            'type': 'auth_error',
+                            'data': {'message': 'Invalid or expired token'}
+                        })
+                        
+                except Exception as e:
+                    logger.error(f"Token verification error: {e}")
+                    await self.safe_send(websocket, {
+                        'type': 'auth_error',
+                        'data': {'message': 'Token verification failed'}
+                    })
+            
+            # Trading Mode Handlers
+            elif message_type == 'set_trading_mode':
+                try:
+                    mode = data.get('data', {}).get('mode')
+                    
+                    if mode not in ['mock', 'live']:
+                        await self.safe_send(websocket, {
+                            'type': 'error',
+                            'data': {'message': 'Invalid trading mode. Must be "mock" or "live"'}
+                        })
+                        return
+                    
+                    self.trading_manager.set_trading_mode(mode)
+                    
+                    # Test connection for live mode
+                    connection_test = self.trading_manager.test_connection()
+                    
+                    await self.safe_send(websocket, {
+                        'type': 'trading_mode_set',
+                        'data': {
+                            'mode': mode,
+                            'connection_test': connection_test
+                        }
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Set trading mode error: {e}")
+                    await self.safe_send(websocket, {
+                        'type': 'error',
+                        'data': {'message': f'Failed to set trading mode: {str(e)}'}
+                    })
+            
+            elif message_type == 'get_trading_balance':
+                # Remove debug logging to prevent spam
+                # logger.info(f"[WebSocket] Handling get_trading_balance. Data: {data}")
+                try:
+                    asset = data.get('data', {}).get('asset', 'USDT')
+                    mode = data.get('mode', 'mock')
+                    
+                    # Get balance from trading manager
+                    balance_data = self.trading_manager.get_trading_balance(asset, mode)
+                    
+                    # Send response
+                    response = {
+                        'type': 'trading_balance',
+                        'data': {
+                            'balance': balance_data,
+                            'mode': mode
+                        }
+                    }
+                    await websocket.send(json.dumps(response))
+                    
+                except Exception as e:
+                    logger.error(f"Error getting trading balance: {e}")
+                    error_response = {
+                        'type': 'error',
+                        'message': f'Failed to get trading balance: {str(e)}'
+                    }
+                    await websocket.send(json.dumps(error_response))
+            
+            elif message_type == 'get_all_trading_balances':
+                try:
+                    balances = self.trading_manager.get_all_balances()
+                    
+                    await self.safe_send(websocket, {
+                        'type': 'all_trading_balances',
+                        'data': {
+                            'balances': balances,
+                            'mode': self.trading_manager.trading_mode
+                        }
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Get all trading balances error: {e}")
+                    await self.safe_send(websocket, {
+                        'type': 'error',
+                        'data': {'message': f'Failed to get balances: {str(e)}'}
+                    })
+            
+            elif message_type == 'place_trading_order':
+                try:
+                    order_data = data.get('data', {})
+                    symbol = order_data.get('symbol')
+                    side = order_data.get('side')
+                    order_type = order_data.get('type', 'MARKET')
+                    quantity = float(order_data.get('quantity', 0))
+                    price = order_data.get('price')
+                    
+                    if price:
+                        price = float(price)
+                    
+                    if not all([symbol, side, quantity]):
+                        await self.safe_send(websocket, {
+                            'type': 'error',
+                            'data': {'message': 'Symbol, side, and quantity are required'}
+                        })
+                        return
+                    
+                    result = self.trading_manager.place_order(symbol, side, order_type, quantity, price)
+                    
+                    await self.safe_send(websocket, {
+                        'type': 'trading_order_placed',
+                        'data': result
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Place trading order error: {e}")
+                    await self.safe_send(websocket, {
+                        'type': 'error',
+                        'data': {'message': f'Failed to place order: {str(e)}'}
+                    })
+            
+            elif message_type == 'get_portfolio_summary':
+                try:
+                    summary = self.trading_manager.get_portfolio_summary()
+                    
+                    await self.safe_send(websocket, {
+                        'type': 'portfolio_summary',
+                        'data': summary
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Get portfolio summary error: {e}")
+                    await self.safe_send(websocket, {
+                        'type': 'error',
+                        'data': {'message': f'Failed to get portfolio summary: {str(e)}'}
+                    })
+            
+            elif message_type == 'test_trading_connection':
+                try:
+                    connection_test = self.trading_manager.test_connection()
+                    
+                    await self.safe_send(websocket, {
+                        'type': 'trading_connection_test',
+                        'data': connection_test
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Test trading connection error: {e}")
+                    await self.safe_send(websocket, {
+                        'type': 'error',
+                        'data': {'message': f'Connection test failed: {str(e)}'}
+                    })
+            
+            elif message_type == 'get_categorized_balances':
+                try:
+                    categorized_balances = self.trading_manager.get_categorized_balances()
+                    
+                    await self.safe_send(websocket, {
+                        'type': 'categorized_balances',
+                        'data': {
+                            'balances': categorized_balances,
+                            'mode': self.trading_manager.trading_mode
+                        }
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Get categorized balances error: {e}")
+                    await self.safe_send(websocket, {
+                        'type': 'error',
+                        'data': {'message': f'Failed to get categorized balances: {str(e)}'}
+                    })
+            
+            elif message_type == 'get_wallet_balances':
+                try:
+                    wallet_type = data.get('data', {}).get('wallet_type', 'SPOT')
+                    balances = self.trading_manager.get_wallet_balances(wallet_type)
+                    
+                    await self.safe_send(websocket, {
+                        'type': 'wallet_balances',
+                        'data': {
+                            'wallet_type': wallet_type,
+                            'balances': balances,
+                            'mode': self.trading_manager.trading_mode
+                        }
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Get wallet balances error: {e}")
+                    await self.safe_send(websocket, {
+                        'type': 'error',
+                        'data': {'message': f'Failed to get wallet balances: {str(e)}'}
+                    })
+            
+            elif message_type == 'transfer_between_wallets':
+                try:
+                    transfer_data = data.get('data', {})
+                    asset = transfer_data.get('asset')
+                    amount = float(transfer_data.get('amount', 0))
+                    from_wallet = transfer_data.get('from_wallet')
+                    to_wallet = transfer_data.get('to_wallet')
+                    
+                    if not all([asset, amount, from_wallet, to_wallet]):
+                        await self.safe_send(websocket, {
+                            'type': 'error',
+                            'data': {'message': 'Asset, amount, from_wallet, and to_wallet are required'}
+                        })
+                        return
+                    
+                    result = self.trading_manager.transfer_between_wallets(asset, amount, from_wallet, to_wallet)
+                    
+                    await self.safe_send(websocket, {
+                        'type': 'wallet_transfer_result',
+                        'data': result
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Transfer between wallets error: {e}")
+                    await self.safe_send(websocket, {
+                        'type': 'error',
+                        'data': {'message': f'Failed to transfer: {str(e)}'}
+                    })
+            
+            elif message_type == 'get_transfer_history':
+                try:
+                    limit = int(data.get('data', {}).get('limit', 50))
+                    history = self.trading_manager.get_transfer_history(limit)
+                    
+                    await self.safe_send(websocket, {
+                        'type': 'transfer_history',
+                        'data': {
+                            'transfers': history,
+                            'mode': self.trading_manager.trading_mode
+                        }
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Get transfer history error: {e}")
+                    await self.safe_send(websocket, {
+                        'type': 'error',
+                        'data': {'message': f'Failed to get transfer history: {str(e)}'}
+                    })
+            
             else:
                 logger.warning(f"Unknown message type: {message_type}")
                 await self.safe_send(websocket, {
@@ -1318,6 +1754,17 @@ class TradingServer:
             if pnl_usd > 0:
                 self.trading_bot.bot_winning_trades += 1
             
+            # 🔥 NEW: Update mode-specific statistics
+            current_mode = self.trading_manager.trading_mode
+            if current_mode == 'mock':
+                self.trading_bot.mock_total_profit += pnl_usd
+                if pnl_usd > 0:
+                    self.trading_bot.mock_winning_trades += 1
+            elif current_mode == 'live':
+                self.trading_bot.live_total_profit += pnl_usd
+                if pnl_usd > 0:
+                    self.trading_bot.live_winning_trades += 1
+            
             # Broadcast trade closure with enhanced notification
             await self.broadcast_message('trade_closed', {
                 'symbol': symbol,
@@ -1373,6 +1820,17 @@ class TradingServer:
             self.trading_bot.bot_total_profit += pnl_usd
             if pnl_usd > 0:
                 self.trading_bot.bot_winning_trades += 1
+            
+            # 🔥 NEW: Update mode-specific statistics
+            current_mode = self.trading_manager.trading_mode
+            if current_mode == 'mock':
+                self.trading_bot.mock_total_profit += pnl_usd
+                if pnl_usd > 0:
+                    self.trading_bot.mock_winning_trades += 1
+            elif current_mode == 'live':
+                self.trading_bot.live_total_profit += pnl_usd
+                if pnl_usd > 0:
+                    self.trading_bot.live_winning_trades += 1
             
             # Broadcast trade closure with enhanced notification
             await self.broadcast_message('trade_closed', {
@@ -1691,7 +2149,7 @@ class TradingServer:
                                             current_balance = self.trade_execution.get_balance()
                                             
                                             # Execute the trade
-                                            trade_result = await self.trading_bot.execute_bot_trade(symbol, result, current_price, current_balance)
+                                            trade_result = await self.trading_bot.execute_bot_trade(symbol, result, current_price, current_balance, self.trading_manager.trading_mode)
                                             
                                             if trade_result.get('success'):
                                                 logger.info(f"[SUCCESS] Automated trade executed successfully: {trade_result}")

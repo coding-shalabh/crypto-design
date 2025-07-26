@@ -759,17 +759,28 @@
   color: #999;
 }
 
+/* Enhanced section header */
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #333;
 }
 
 .section-header h3 {
   margin: 0;
-  color: #fff;
   font-size: 18px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+/* Overview section */
+.overview-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 .empty-state {
@@ -931,4 +942,62 @@
 .history-table .table-body {
   max-height: 50vh;
   overflow-y: auto;
+} 
+
+/* 🔥 NEW: Connection Status Styles */
+.connection-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-indicator.connected {
+  background: rgba(40, 167, 69, 0.2);
+  color: #28a745;
+  border: 1px solid rgba(40, 167, 69, 0.3);
+}
+
+.status-indicator.disconnected {
+  background: rgba(220, 53, 69, 0.2);
+  color: #dc3545;
+  border: 1px solid rgba(220, 53, 69, 0.3);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-indicator.connected .status-dot {
+  background: #28a745;
+  box-shadow: 0 0 6px rgba(40, 167, 69, 0.6);
+}
+
+.status-indicator.disconnected .status-dot {
+  background: #dc3545;
+  box-shadow: 0 0 6px rgba(220, 53, 69, 0.6);
+}
+
+.status-text {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.connection-info {
+  font-size: 10px;
+  color: #888;
+  text-align: right;
 } 

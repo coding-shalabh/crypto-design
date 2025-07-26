@@ -21,14 +21,14 @@ class RealTimePriceService {
   // Initialize with Redux store
   init(store) {
     if (this.isInitialized) {
-      console.log('🔍 RealTimePriceService: Already initialized');
+      console.log(' RealTimePriceService: Already initialized');
       return;
     }
 
     this.store = store;
     this.isInitialized = true;
 
-    console.log('🔍 RealTimePriceService: Initializing real-time price service');
+    console.log(' RealTimePriceService: Initializing real-time price service');
 
     // Subscribe to Binance price updates
     binanceWebSocketService.subscribe(this.handlePriceUpdate.bind(this));
@@ -44,7 +44,7 @@ class RealTimePriceService {
       binanceWebSocketService.addSymbols(watchedSymbols);
     }
 
-    console.log('🔍 RealTimePriceService: Initialized with symbols:', watchedSymbols);
+    console.log(' RealTimePriceService: Initialized with symbols:', watchedSymbols);
   }
 
   // Handle price updates from Binance
@@ -88,7 +88,7 @@ class RealTimePriceService {
     // Dispatch batch update to Redux store
     this.store.dispatch(batchUpdateRealTimePrices(updates));
 
-    console.log(`🔍 RealTimePriceService: Batch updated ${updates.length} prices`);
+    console.log(` RealTimePriceService: Batch updated ${updates.length} prices`);
   }
 
   // Update performance statistics
@@ -103,7 +103,7 @@ class RealTimePriceService {
       lastUpdateTime: Date.now(),
     }));
 
-    console.log(`🔍 RealTimePriceService: ${updatesPerSecond} updates/sec`);
+    console.log(` RealTimePriceService: ${updatesPerSecond} updates/sec`);
   }
 
   // Monitor Binance connection status
@@ -125,7 +125,7 @@ class RealTimePriceService {
       // Update Redux store with connection status
       this.store.dispatch(setBinanceConnectionStatus(connectionStatus));
 
-      console.log('🔍 RealTimePriceService: Connection status:', connectionStatus, status);
+      console.log(' RealTimePriceService: Connection status:', connectionStatus, status);
     };
 
     // Check every 5 seconds
@@ -135,13 +135,13 @@ class RealTimePriceService {
 
   // Add symbols to watch
   addWatchedSymbols(symbols) {
-    console.log('🔍 RealTimePriceService: Adding watched symbols:', symbols);
+    console.log(' RealTimePriceService: Adding watched symbols:', symbols);
     binanceWebSocketService.addSymbols(symbols);
   }
 
   // Remove symbols from watch
   removeWatchedSymbols(symbols) {
-    console.log('🔍 RealTimePriceService: Removing watched symbols:', symbols);
+    console.log(' RealTimePriceService: Removing watched symbols:', symbols);
     binanceWebSocketService.removeSymbols(symbols);
   }
 
@@ -157,13 +157,13 @@ class RealTimePriceService {
 
   // Manually trigger connection
   connect() {
-    console.log('🔍 RealTimePriceService: Manually triggering connection');
+    console.log(' RealTimePriceService: Manually triggering connection');
     binanceWebSocketService.connect();
   }
 
   // Disconnect
   disconnect() {
-    console.log('🔍 RealTimePriceService: Disconnecting');
+    console.log(' RealTimePriceService: Disconnecting');
     binanceWebSocketService.disconnect();
     
     // Clear buffer
@@ -172,7 +172,7 @@ class RealTimePriceService {
 
   // Cleanup
   cleanup() {
-    console.log('🔍 RealTimePriceService: Cleaning up');
+    console.log(' RealTimePriceService: Cleaning up');
     this.disconnect();
     
     if (this.bufferTimeout) {
