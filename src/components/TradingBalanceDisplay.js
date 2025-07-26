@@ -14,46 +14,37 @@ const TradingBalanceDisplay = ({ isConnected, sendMessage, data, mode }) => {
   const currentMode = mode || tradingMode;
   const currentIsLiveMode = mode ? mode === 'live' : isLiveMode;
 
-  // console.log(' TradingBalanceDisplay: Component initialized:', {
-  //   isConnected,
-  //   currentMode,
-  //   currentIsLiveMode,
-  //   hasData: !!data,
-  //   dataKeys: data ? Object.keys(data) : null
-  // });
 
-  // Load balance when component mounts or mode changes
+  // Load balance when component mounts or mode changes (with debouncing)
   useEffect(() => {
-    // Remove debug logging to prevent spam
-    // console.log('[TradingBalanceDisplay] useEffect triggered. isConnected:', isConnected, 'mode:', currentMode);
     if (isConnected) {
-      // console.log('[TradingBalanceDisplay] Sending get_trading_balance request. Mode:', currentMode);
-      sendMessage({ type: 'get_trading_balance', mode: currentMode });
+      // Debounce balance requests to prevent rapid API calls
+      const timeoutId = setTimeout(() => {
+        sendMessage({ type: 'get_trading_balance', mode: currentMode });
+      }, 100); // 100ms debounce
+      
+      return () => clearTimeout(timeoutId);
     }
   }, [isConnected, sendMessage, currentMode]);
 
   // Listen for balance updates from websocket data
   useEffect(() => {
     if (data) {
-      // console.log(' TradingBalanceDisplay: Received websocket data:', data);
       
       // Check for trading balance response (new direct handling)
       if (data.trading_balance) {
-        // console.log('[TradingBalanceDisplay] Received trading_balance:', data.trading_balance);
         setBalance(data.trading_balance);
         setLoading(false);
         setLastUpdate(new Date());
       }
       // Check for trading balance response (legacy format)
       else if (data.type === 'trading_balance' && data.data && data.data.balance) {
-        // console.log(' TradingBalanceDisplay: Received trading balance response:', data.data.balance);
         setBalance(data.data.balance);
         setLoading(false);
         setLastUpdate(new Date());
       }
       // Also check if balance is directly in data (for ongoing updates)
       else if (data.trading_balance) {
-        // console.log(' TradingBalanceDisplay: Received direct trading balance:', data.trading_balance);
         setBalance(data.trading_balance);
         setLoading(false);
         setLastUpdate(new Date());
@@ -68,7 +59,6 @@ const TradingBalanceDisplay = ({ isConnected, sendMessage, data, mode }) => {
           wallet_type: 'MOCK',
           mode: currentMode
         };
-        // console.log(' TradingBalanceDisplay: Using paper balance for mock mode:', mockBalance);
         setBalance(mockBalance);
         setLoading(false);
         setLastUpdate(new Date());
@@ -78,29 +68,26 @@ const TradingBalanceDisplay = ({ isConnected, sendMessage, data, mode }) => {
 
   const loadTradingBalance = async () => {
     if (!isConnected || !sendMessage) {
-      // console.log(' TradingBalanceDisplay: Not connected, skipping balance load');
       return;
     }
 
     setLoading(true);
-    // console.log(' TradingBalanceDisplay: Requesting trading balance for mode:', currentMode);
     
     try {
       // Request trading balance via websocket
       sendMessage({
         type: 'get_trading_balance',
-        data: { asset: 'USDT' }
+        data: { asset: 'USDT' },
+        mode: currentMode
       });
 
       // Set timeout to stop loading if no response
       setTimeout(() => {
         if (loading) {
-          // console.log(' TradingBalanceDisplay: Balance request timeout');
           setLoading(false);
         }
-      }, 10000);
+      }, 15000); // Increased timeout
     } catch (error) {
-      // console.error(' TradingBalanceDisplay: Failed to request balance:', error);
       setLoading(false);
     }
   };
@@ -111,6 +98,61 @@ const TradingBalanceDisplay = ({ isConnected, sendMessage, data, mode }) => {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     });
+  };
+
+  const getWalletTypeDisplay = (walletType) => {
+    const walletIcons = {
+      'SPOT': '💰',
+      'FUTURES': '📈',
+      'MARGIN': '⚖️',
+      'FUNDING': '💳',
+      'MOCK': '🎯',
+      'MOCK_FALLBACK': '⚠️'
+    };
+    
+    const walletNames = {
+      'SPOT': 'Spot Wallet',
+      'FUTURES': 'Futures Wallet',
+      'MARGIN': 'Margin Wallet',
+      'FUNDING': 'Funding Wallet',
+      'MOCK': 'Mock Trading',
+      'MOCK_FALLBACK': 'Mock (Fallback)'
+    };
+    
+    return {
+      icon: walletIcons[walletType] || '💰',
+      name: walletNames[walletType] || walletType
+    };
+  };
+
+  const getBalanceStatus = () => {
+    if (!balance) return { status: 'unknown', message: 'No balance data' };
+    
+    if (balance.available_for_trading) {
+      return { 
+        status: 'ready', 
+        message: 'Ready for trading',
+        color: '#10b981'
+      };
+    } else if (balance.total > 0 && balance.free === 0) {
+      return { 
+        status: 'locked', 
+        message: 'Balance locked in orders',
+        color: '#f59e0b'
+      };
+    } else if (balance.total === 0) {
+      return { 
+        status: 'empty', 
+        message: 'No balance available',
+        color: '#ef4444'
+      };
+    } else {
+      return { 
+        status: 'unknown', 
+        message: 'Status unknown',
+        color: '#6b7280'
+      };
+    }
   };
 
   const getBalanceInfo = () => {
@@ -219,12 +261,34 @@ const TradingBalanceDisplay = ({ isConnected, sendMessage, data, mode }) => {
           </div>
         ) : (
           <>
-            <span className="amount">{formatBalance(effectiveBalance?.total || 0)}</span>
-            <span className="currency">USDT</span>
-            <span className={`wallet-type ${effectiveBalance?.wallet_type?.toLowerCase()}`}>
-              {effectiveBalance?.wallet_type === 'FUTURES' ? '📈' : 
-               (effectiveBalance?.wallet_type === 'MOCK' || effectiveBalance?.wallet_type === 'MOCK_FALLBACK') ? '🧪' : '💰'}
-            </span>
+            <div className="balance-main">
+              <span className="amount">{formatBalance(effectiveBalance?.total || 0)}</span>
+              <span className="currency">USDT</span>
+            </div>
+            
+            <div className="balance-details">
+              <div className="wallet-info">
+                <span className="wallet-icon">
+                  {getWalletTypeDisplay(effectiveBalance?.wallet_type).icon}
+                </span>
+                <span className="wallet-name">
+                  {getWalletTypeDisplay(effectiveBalance?.wallet_type).name}
+                </span>
+              </div>
+              
+              {effectiveBalance && (
+                <div className="balance-status" style={{ color: getBalanceStatus().color }}>
+                  <span className="status-indicator">●</span>
+                  <span className="status-text">{getBalanceStatus().message}</span>
+                </div>
+              )}
+              
+              {effectiveBalance?.free !== effectiveBalance?.total && effectiveBalance?.total > 0 && (
+                <div className="free-balance">
+                  Free: {formatBalance(effectiveBalance?.free || 0)} USDT
+                </div>
+              )}
+            </div>
           </>
         )}
       </div>

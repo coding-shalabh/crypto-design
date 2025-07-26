@@ -34,6 +34,17 @@ export const TradingModeProvider = ({ children }) => {
         data: { mode }
       });
       console.log('TradingModeContext: Sent trading mode to backend:', mode);
+      
+      // 🔥 NEW: Request fresh balance after mode change
+      setTimeout(() => {
+        if (isConnected && sendMessage) {
+          sendMessage({
+            type: 'get_trading_balance',
+            data: { asset: 'USDT', mode }
+          });
+          console.log('TradingModeContext: Requested fresh balance for mode:', mode);
+        }
+      }, 1000); // Wait 1 second for mode to be set
     }
   }, [isLiveMode, isConnected, sendMessage]);
 

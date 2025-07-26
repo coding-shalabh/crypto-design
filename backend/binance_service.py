@@ -7,6 +7,10 @@ import json
 from typing import Dict, List, Optional
 from decimal import Decimal
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +186,7 @@ class BinanceService:
                 'symbol': symbol,
                 'side': side.upper(),
                 'type': order_type.upper(),
-                'quantity': str(quantity)
+                'quantity': self.format_quantity(symbol, quantity)
             }
             
             if order_type.upper() in ['LIMIT', 'STOP_LOSS_LIMIT', 'TAKE_PROFIT_LIMIT']:
@@ -298,48 +302,116 @@ class BinanceService:
             logger.error(f"Failed to calculate quantity for {symbol}: {e}")
             raise
     
+    def format_quantity(self, symbol: str, quantity: float) -> str:
+        """Format quantity with proper precision for the symbol"""
+        try:
+            symbol_info = self.get_symbol_info(symbol)
+            
+            # Get lot size filter to determine precision
+            lot_size_filter = None
+            for filter_info in symbol_info.get('filters', []):
+                if filter_info['filterType'] == 'LOT_SIZE':
+                    lot_size_filter = filter_info
+                    break
+            
+            if not lot_size_filter:
+                return str(quantity)
+            
+            step_size = lot_size_filter['stepSize']
+            
+            # Count decimal places in step size
+            if '.' in step_size:
+                precision = len(step_size.rstrip('0').split('.')[1])
+            else:
+                precision = 0
+            
+            # Format with proper precision
+            return f"{quantity:.{precision}f}"
+        except Exception as e:
+            logger.error(f"Failed to format quantity for {symbol}: {e}")
+            return str(quantity)
+    
     def get_categorized_balances(self) -> Dict:
         """Get balances categorized by wallet type (Spot, Futures, etc.)"""
         try:
             categorized_balances = {}
             
             # Get Spot wallet balances
-            spot_balances = self.get_spot_balances()
-            categorized_balances['SPOT'] = {
-                'name': self.wallet_types['SPOT'],
-                'balances': spot_balances,
-                'total_usdt': self._calculate_total_usdt_value(spot_balances)
-            }
+            try:
+                spot_balances = self.get_spot_balances()
+                categorized_balances['SPOT'] = {
+                    'name': self.wallet_types['SPOT'],
+                    'balances': spot_balances,
+                    'total_usdt': self._calculate_total_usdt_value(spot_balances)
+                }
+            except Exception as e:
+                logger.error(f"Failed to get spot balances: {e}")
+                categorized_balances['SPOT'] = {
+                    'name': self.wallet_types['SPOT'],
+                    'balances': [],
+                    'total_usdt': 0.0
+                }
             
             # Get Futures wallet balances
-            futures_balances = self.get_futures_balances()
-            categorized_balances['FUTURES'] = {
-                'name': self.wallet_types['FUTURES'],
-                'balances': futures_balances,
-                'total_usdt': self._calculate_total_usdt_value(futures_balances)
-            }
+            try:
+                futures_balances = self.get_futures_balances()
+                categorized_balances['FUTURES'] = {
+                    'name': self.wallet_types['FUTURES'],
+                    'balances': futures_balances,
+                    'total_usdt': self._calculate_total_usdt_value(futures_balances)
+                }
+            except Exception as e:
+                logger.error(f"Failed to get futures balances: {e}")
+                categorized_balances['FUTURES'] = {
+                    'name': self.wallet_types['FUTURES'],
+                    'balances': [],
+                    'total_usdt': 0.0
+                }
             
             # Get Cross Margin balances
-            margin_balances = self.get_margin_balances()
-            categorized_balances['MARGIN'] = {
-                'name': self.wallet_types['MARGIN'],
-                'balances': margin_balances,
-                'total_usdt': self._calculate_total_usdt_value(margin_balances)
-            }
+            try:
+                margin_balances = self.get_margin_balances()
+                categorized_balances['MARGIN'] = {
+                    'name': self.wallet_types['MARGIN'],
+                    'balances': margin_balances,
+                    'total_usdt': self._calculate_total_usdt_value(margin_balances)
+                }
+            except Exception as e:
+                logger.error(f"Failed to get margin balances: {e}")
+                categorized_balances['MARGIN'] = {
+                    'name': self.wallet_types['MARGIN'],
+                    'balances': [],
+                    'total_usdt': 0.0
+                }
             
             # Get Funding wallet balances
-            funding_balances = self.get_funding_balances()
-            categorized_balances['FUNDING'] = {
-                'name': self.wallet_types['FUNDING'],
-                'balances': funding_balances,
-                'total_usdt': self._calculate_total_usdt_value(funding_balances)
-            }
+            try:
+                funding_balances = self.get_funding_balances()
+                categorized_balances['FUNDING'] = {
+                    'name': self.wallet_types['FUNDING'],
+                    'balances': funding_balances,
+                    'total_usdt': self._calculate_total_usdt_value(funding_balances)
+                }
+            except Exception as e:
+                logger.error(f"Failed to get funding balances: {e}")
+                categorized_balances['FUNDING'] = {
+                    'name': self.wallet_types['FUNDING'],
+                    'balances': [],
+                    'total_usdt': 0.0
+                }
             
+            logger.info(f"Successfully retrieved categorized balances: {list(categorized_balances.keys())}")
             return categorized_balances
             
         except Exception as e:
             logger.error(f"Failed to get categorized balances: {e}")
-            raise
+            # Return empty structure instead of raising
+            return {
+                'SPOT': {'name': 'Spot Wallet', 'balances': [], 'total_usdt': 0.0},
+                'FUTURES': {'name': 'Futures Wallet', 'balances': [], 'total_usdt': 0.0},
+                'MARGIN': {'name': 'Cross Margin', 'balances': [], 'total_usdt': 0.0},
+                'FUNDING': {'name': 'Funding Wallet', 'balances': [], 'total_usdt': 0.0}
+            }
     
     def get_spot_balances(self) -> List[Dict]:
         """Get Spot wallet balances"""
@@ -555,6 +627,93 @@ class BinanceService:
                 'message': f'Transfer failed: {str(e)}'
             }
     
+    def get_futures_trading_balance(self, asset: str = 'USDT') -> Dict:
+        """Get specific asset balance from futures wallet - optimized for trading"""
+        try:
+            futures_balances = self.get_futures_balances()
+            
+            for balance in futures_balances:
+                if balance['asset'] == asset:
+                    return {
+                        'asset': asset,
+                        'free': balance['free'],
+                        'locked': balance['locked'],
+                        'total': balance['total'],
+                        'wallet_type': 'FUTURES',
+                        'available_for_trading': balance['free'] > 0,
+                        'success': True
+                    }
+            
+            # If asset not found, return zero balance
+            return {
+                'asset': asset,
+                'free': 0.0,
+                'locked': 0.0,
+                'total': 0.0,
+                'wallet_type': 'FUTURES',
+                'available_for_trading': False,
+                'success': True,
+                'message': f'No {asset} balance found in futures wallet'
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get futures trading balance for {asset}: {e}")
+            return {
+                'asset': asset,
+                'free': 0.0,
+                'locked': 0.0,
+                'total': 0.0,
+                'wallet_type': 'FUTURES',
+                'available_for_trading': False,
+                'success': False,
+                'error': str(e)
+            }
+    
+    def verify_trading_readiness(self) -> Dict:
+        """Verify if the account is ready for futures trading"""
+        try:
+            # Test connectivity
+            if not self.test_connectivity():
+                return {
+                    'ready': False,
+                    'error': 'API connectivity failed'
+                }
+            
+            # Check futures account access
+            try:
+                account_info = self._make_futures_request('/fapi/v2/account', {}, signed=True)
+                
+                # Check if futures trading is enabled
+                can_trade = account_info.get('canTrade', False)
+                if not can_trade:
+                    return {
+                        'ready': False,
+                        'error': 'Futures trading not enabled on account'
+                    }
+                
+                # Get USDT balance
+                usdt_balance = self.get_futures_trading_balance('USDT')
+                
+                return {
+                    'ready': True,
+                    'can_trade': can_trade,
+                    'usdt_balance': usdt_balance,
+                    'account_status': 'ACTIVE'
+                }
+                
+            except Exception as e:
+                return {
+                    'ready': False,
+                    'error': f'Futures account access failed: {str(e)}'
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to verify trading readiness: {e}")
+            return {
+                'ready': False,
+                'error': f'Verification failed: {str(e)}'
+            }
+
     def get_transfer_history(self, limit: int = 50) -> List[Dict]:
         """Get transfer history between wallets"""
         try:
@@ -613,3 +772,86 @@ class BinanceService:
             'FUNDING': 'FUNDING'
         }
         return wallet_mapping.get(wallet_symbol, wallet_symbol)
+    
+    def place_futures_order(self, symbol: str, side: str, quantity: float, price: float = None, order_type: str = 'LIMIT') -> Dict:
+        """Place a futures order"""
+        try:
+            params = {
+                'symbol': symbol,
+                'side': side.upper(),
+                'type': order_type.upper(),
+                'quantity': quantity
+            }
+            
+            if order_type.upper() == 'LIMIT':
+                if price is None:
+                    raise ValueError("Price is required for LIMIT orders")
+                params['price'] = f"{price:.2f}"
+                params['timeInForce'] = 'GTC'
+            
+            response = self._make_futures_request('/fapi/v1/order', params, method='POST', signed=True)
+            return response
+            
+        except Exception as e:
+            logger.error(f"Failed to place futures order: {e}")
+            raise e
+    
+    def cancel_futures_order(self, symbol: str, order_id: int) -> Dict:
+        """Cancel a futures order"""
+        try:
+            params = {
+                'symbol': symbol,
+                'orderId': order_id
+            }
+            
+            response = self._make_futures_request('/fapi/v1/order', params, method='DELETE', signed=True)
+            return response
+            
+        except Exception as e:
+            logger.error(f"Failed to cancel futures order: {e}")
+            raise e
+    
+    def get_futures_order_status(self, symbol: str, order_id: int) -> Dict:
+        """Get futures order status"""
+        try:
+            params = {
+                'symbol': symbol,
+                'orderId': order_id
+            }
+            
+            response = self._make_futures_request('/fapi/v1/order', params, signed=True)
+            return response
+            
+        except Exception as e:
+            logger.error(f"Failed to get futures order status: {e}")
+            raise e
+    
+    def get_futures_positions(self) -> List[Dict]:
+        """Get current futures positions"""
+        try:
+            response = self._make_futures_request('/fapi/v2/account', {}, signed=True)
+            return response.get('positions', [])
+            
+        except Exception as e:
+            logger.error(f"Failed to get futures positions: {e}")
+            return []
+    
+    def close_futures_position(self, symbol: str, position_amt: float) -> Dict:
+        """Close a futures position with market order"""
+        try:
+            side = 'SELL' if position_amt > 0 else 'BUY'
+            quantity = abs(position_amt)
+            
+            params = {
+                'symbol': symbol,
+                'side': side,
+                'type': 'MARKET',
+                'quantity': quantity
+            }
+            
+            response = self._make_futures_request('/fapi/v1/order', params, method='POST', signed=True)
+            return response
+            
+        except Exception as e:
+            logger.error(f"Failed to close futures position: {e}")
+            raise e

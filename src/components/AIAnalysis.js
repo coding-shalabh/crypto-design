@@ -3,15 +3,6 @@ import { useTradingMode } from '../contexts/TradingModeContext';
 import './AIAnalysis.css';
 
 const AIAnalysis = ({ isConnected, sendMessage, data, startBot, stopBot, getBotStatus, updateBotConfig }) => {
-  console.log(' AIAnalysis: Component initialized with props:', { 
-    isConnected, 
-    sendMessage: !!sendMessage,
-    data: data ? Object.keys(data) : null,
-    startBot: !!startBot,
-    stopBot: !!stopBot,
-    getBotStatus: !!getBotStatus,
-    updateBotConfig: !!updateBotConfig
-  });
 
   // Get global trading mode
   const { isLiveMode } = useTradingMode();
@@ -70,7 +61,7 @@ const AIAnalysis = ({ isConnected, sendMessage, data, startBot, stopBot, getBotS
 
       setLastUpdate(new Date());
     } catch (error) {
-      console.error('Error requesting data:', error);
+      // Error requesting data - handle silently
     }
   };
 
@@ -82,14 +73,12 @@ const AIAnalysis = ({ isConnected, sendMessage, data, startBot, stopBot, getBotS
   // Listen for WebSocket messages
   useEffect(() => {
     const handleBotResponse = (messageData) => {
-      console.log(' AIAnalysis: Received bot response:', messageData);
       if (messageData.type === 'bot_status_response') {
         setBotStatus(messageData.data);
       }
     };
 
     const handleTradeHistoryResponse = (messageData) => {
-      console.log(' AIAnalysis: Received trade history:', messageData);
       if (messageData.type === 'trade_history_response') {
         const trades = messageData.data.trades || [];
         const mode = messageData.data.mode || 'unknown';
@@ -102,14 +91,12 @@ const AIAnalysis = ({ isConnected, sendMessage, data, startBot, stopBot, getBotS
     };
 
     const handleAnalysisLogsResponse = (messageData) => {
-      console.log(' AIAnalysis: Received analysis logs:', messageData);
       if (messageData.type === 'analysis_logs_response') {
         setAnalysisLogs(messageData.data.logs || []);
       }
     };
 
     const handleTradeLogsResponse = (messageData) => {
-      console.log(' AIAnalysis: Received trade logs:', messageData);
       if (messageData.type === 'trade_logs_response') {
         setTradeLogs(messageData.data.logs || []);
       }
@@ -167,7 +154,19 @@ const AIAnalysis = ({ isConnected, sendMessage, data, startBot, stopBot, getBotS
   // Render Overview Section
   const renderOverview = () => {
     const positions = data?.positions || {};
-    const balance = data?.paper_balance || 0;
+    const { paper_balance = 0, trading_balance = null } = data || {};
+    
+    // Use correct balance based on trading mode
+    const balance = (() => {
+      if (isLiveMode && trading_balance) {
+        if (typeof trading_balance.total === 'number' && trading_balance.total >= 0) {
+          return trading_balance.total;
+        }
+        return 0;
+      }
+      return paper_balance || 100000;
+    })();
+    
     const recentTrades = data?.recent_trades || [];
     
     // Calculate stats from available data

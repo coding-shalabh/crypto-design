@@ -1000,4 +1000,411 @@
   font-size: 10px;
   color: #888;
   text-align: right;
+}
+
+/* Wallet Management Styles */
+.wallet-card {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.wallet-card:hover {
+  background: #2a2a2a;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.wallet-type {
+  font-size: 10px;
+  color: #888;
+  font-weight: normal;
+}
+
+.wallet-hint {
+  font-size: 10px;
+  color: #666;
+  margin-top: 4px;
+}
+
+.wallet-modal {
+  width: 600px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.wallet-modal-body {
+  padding: 20px;
+}
+
+.wallet-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.wallet-tab {
+  background: #2a2a2a;
+  border: 1px solid #444;
+  color: #ccc;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.wallet-tab:hover {
+  background: #333;
+  border-color: #555;
+  color: #fff;
+}
+
+.wallet-tab.active {
+  background: #007bff;
+  border-color: #007bff;
+  color: #fff;
+}
+
+.wallet-content {
+  background: #222;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.wallet-section h4 {
+  margin: 0 0 15px 0;
+  color: #fff;
+  font-size: 18px;
+}
+
+.balance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.balance-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #2a2a2a;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #444;
+}
+
+.balance-asset {
+  font-weight: 600;
+  color: #fff;
+  font-size: 16px;
+}
+
+.balance-amounts {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.balance-total {
+  color: #fff;
+  font-weight: 600;
+}
+
+.balance-free {
+  color: #28a745;
+  font-size: 12px;
+}
+
+.balance-locked {
+  color: #ffc107;
+  font-size: 12px;
+}
+
+.no-balances {
+  text-align: center;
+  color: #888;
+  padding: 20px;
+  font-style: italic;
+}
+
+.total-value {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+  color: #28a745;
+  background: #1a3a1a;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #28a745;
+}
+
+.wallet-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.btn-primary {
+  background: #007bff;
+  border: 1px solid #007bff;
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+  background: #0056b3;
+  border-color: #0056b3;
+}
+
+.btn-secondary {
+  background: #6c757d;
+  border: 1px solid #6c757d;
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+  background: #545b62;
+  border-color: #545b62;
+}
+
+/* Transfer Modal Styles */
+.transfer-modal {
+  width: 500px;
+  max-width: 90vw;
+}
+
+.transfer-modal-body {
+  padding: 20px;
+}
+
+.transfer-form {
+  background: #222;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.form-row {
+  margin-bottom: 15px;
+}
+
+.form-row label {
+  display: block;
+  margin-bottom: 5px;
+  color: #fff;
+  font-weight: 500;
+}
+
+.balance-info {
+  font-size: 12px;
+  color: #888;
+  font-weight: normal;
+}
+
+.form-row select,
+.form-row input {
+  width: 100%;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.form-row select:focus,
+.form-row input:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.amount-input-container {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.amount-input-container input {
+  flex: 1;
+}
+
+.max-btn {
+  background: #28a745;
+  border: 1px solid #28a745;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.max-btn:hover {
+  background: #218838;
+  border-color: #218838;
+}
+
+.transfer-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.btn-primary:disabled {
+  background: #666;
+  border-color: #666;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.btn-primary:disabled:hover {
+  background: #666;
+  border-color: #666;
+}
+
+/* Insufficient Balance Modal Styles */
+.insufficient-balance-modal {
+  width: 600px;
+  max-width: 90vw;
+}
+
+.insufficient-balance-body {
+  padding: 20px;
+}
+
+.balance-summary {
+  background: #222;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.balance-summary h4 {
+  margin: 0 0 15px 0;
+  color: #fff;
+  font-size: 18px;
+}
+
+.balance-info-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.balance-info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #333;
+}
+
+.balance-info-item:last-child {
+  border-bottom: none;
+}
+
+.balance-info-item .label {
+  color: #ccc;
+  font-size: 14px;
+}
+
+.balance-info-item .value {
+  color: #fff;
+  font-weight: 600;
+}
+
+.balance-info-item .value.shortage {
+  color: #dc3545;
+}
+
+.transfer-suggestions {
+  background: #222;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.transfer-suggestions h4 {
+  margin: 0 0 10px 0;
+  color: #fff;
+  font-size: 18px;
+}
+
+.transfer-suggestions p {
+  color: #ccc;
+  margin-bottom: 15px;
+}
+
+.suggestions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.suggestion-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #2a2a2a;
+  padding: 15px;
+  border-radius: 6px;
+  border: 1px solid #444;
+}
+
+.suggestion-info {
+  flex: 1;
+}
+
+.suggestion-title {
+  color: #fff;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.suggestion-details {
+  color: #28a745;
+  font-size: 12px;
+}
+
+.suggestion-btn {
+  margin-left: 15px;
+  white-space: nowrap;
+}
+
+.no-options {
+  background: #2a1a1a;
+  border: 1px solid #5a2a2a;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.no-options h4 {
+  margin: 0 0 10px 0;
+  color: #dc3545;
+  font-size: 18px;
+}
+
+.no-options p {
+  color: #ccc;
+  margin: 8px 0;
+  line-height: 1.5;
 } 

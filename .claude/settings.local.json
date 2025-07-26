@@ -17,7 +17,9 @@
       "Bash(set PORT=8768)",
       "Bash(npm install:*)",
       "Bash(node:*)",
-      "Bash(del test_redux_integration.js)"
+      "Bash(del test_redux_integration.js)",
+      "Bash(sed:*)",
+      "Bash(pip install:*)"
     ],
     "deny": []
   }

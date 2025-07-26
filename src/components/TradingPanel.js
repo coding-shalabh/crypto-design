@@ -33,14 +33,6 @@ const TradingPanel = ({
   currentPrice = null,
   cryptoData = new Map()
 }) => {
-  console.log(' TradingPanel: Component initialized with props:', { 
-    currentSymbol, 
-    currentPrice, 
-    isConnected, 
-    sendMessage: !!sendMessage,
-    data: Object.keys(data || {}).length,
-    cryptoData: cryptoData ? cryptoData.size : 0
-  });
 
   // 🔥 NEW: Use Redux hooks for real-time prices
   const reduxPrice = usePriceBySymbol(currentSymbol);
@@ -48,83 +40,55 @@ const TradingPanel = ({
   const binanceConnectionStatus = useBinanceConnectionStatus();
   const priceUpdateStats = usePriceUpdateStats();
   
-  console.log(' TradingPanel: Redux price data:', { 
-    reduxPrice, 
-    enhancedPrice, 
-    binanceConnectionStatus, 
-    priceUpdateStats 
-  });
 
   const [activeTab, setActiveTab] = useState('buy');
-  console.log(' TradingPanel: Initial activeTab:', activeTab);
   const [amount, setAmount] = useState('');
-  console.log(' TradingPanel: Initial amount:', amount);
   const [orderType, setOrderType] = useState('limit');
-  console.log(' TradingPanel: Initial orderType:', orderType);
   const [leverage, setLeverage] = useState(10);
-  console.log(' TradingPanel: Initial leverage:', leverage);
   const [marginMode, setMarginMode] = useState('isolated');
-  console.log(' TradingPanel: Initial marginMode:', marginMode);
   const [price, setPrice] = useState('');
-  console.log(' TradingPanel: Initial price:', price);
   const [size, setSize] = useState('');
-  console.log(' TradingPanel: Initial size:', size);
   const [sizeUnit, setSizeUnit] = useState('USDT'); // Add size unit state
-  console.log(' TradingPanel: Initial sizeUnit:', sizeUnit);
   const [sizeSliderValue, setSizeSliderValue] = useState(0); // Add slider value state
-  console.log(' TradingPanel: Initial sizeSliderValue:', sizeSliderValue);
   const [useTpSl, setUseTpSl] = useState(false);
-  console.log(' TradingPanel: Initial useTpSl:', useTpSl);
   const [reduceOnly, setReduceOnly] = useState(false);
-  console.log(' TradingPanel: Initial reduceOnly:', reduceOnly);
   const [isExecuting, setIsExecuting] = useState(false);
-  console.log(' TradingPanel: Initial isExecuting:', isExecuting);
   const [lastTrade, setLastTrade] = useState(null);
-  console.log(' TradingPanel: Initial lastTrade:', lastTrade);
   const [lastTradeId, setLastTradeId] = useState(null); // Track last trade to prevent duplicates
-  console.log(' TradingPanel: Initial lastTradeId:', lastTradeId);
   
   // Get trading mode from global context
   const { isLiveMode, tradingMode } = useTradingMode();
-  console.log(' TradingPanel: Current trading mode:', { isLiveMode, tradingMode });
 
   // Safely destructure data with defaults
   const { paper_balance = 0, trading_balance = null, positions = {}, recent_trades = [] } = data || {};
   
-  // 🔥 NEW: Use live balance when in live mode, fallback to paper balance
-  const effectiveBalance = isLiveMode && trading_balance ? trading_balance.total : paper_balance;
+  // 🔥 FIXED: Properly determine effective balance based on mode and actual balance data
+  const effectiveBalance = (() => {
+    if (isLiveMode && trading_balance) {
+      // In live mode, use trading_balance.total if it exists and is valid
+      if (typeof trading_balance.total === 'number' && trading_balance.total >= 0) {
+        return trading_balance.total;
+      }
+      // If trading_balance exists but total is invalid, return 0 for live mode
+      return 0;
+    }
+    // In mock mode or no trading_balance, use paper_balance
+    return paper_balance || 100000;
+  })();
   
-  console.log(' TradingPanel: Current data structure:', { 
-    paper_balance, 
-    trading_balance, 
-    effectiveBalance,
-    isLiveMode,
-    positions: Object.keys(positions).length, 
-    recent_trades: recent_trades.length 
-  });
-  console.log(' TradingPanel: Data from props:', { 
-    paper_balance, 
-    trading_balance,
-    effectiveBalance,
-    positions: Object.keys(positions).length, 
-    recent_trades: recent_trades.length 
-  });
 
   // Calculate position info
   const currentPosition = positions[currentSymbol];
-  console.log(' TradingPanel: Current position for', currentSymbol, ':', currentPosition);
 
   useEffect(() => {
     if (isConnected) {
       getPositions();
-      console.log(' TradingPanel: getPositions called, isConnected:', isConnected);
     }
   }, [isConnected, getPositions]);
 
   // Request crypto data if not available
   useEffect(() => {
     if (isConnected && (!cryptoData || cryptoData.size === 0)) {
-      console.log(' TradingPanel: No crypto data available, requesting from backend...');
       // We need to access the getCryptoData function from the parent
       // This will be handled by the useCryptoDataBackend hook
     }
@@ -138,20 +102,16 @@ const TradingPanel = ({
       // Use Redux real-time price first
       if (reduxPrice && reduxPrice.price) {
         foundPrice = reduxPrice.price;
-        console.log(' TradingPanel: Setting market price from Redux:', foundPrice);
       } else if (currentPrice) {
         foundPrice = currentPrice;
-        console.log(' TradingPanel: Setting market price from props:', foundPrice);
       } else if (data && data.price_cache && data.price_cache[currentSymbol]) {
         foundPrice = data.price_cache[currentSymbol].price;
-        console.log(' TradingPanel: Setting market price from cache:', foundPrice);
       } else if (cryptoData && cryptoData.size > 0) {
         const crypto = Array.from(cryptoData.values()).find(
           c => c.symbol === currentSymbol
         );
         if (crypto && crypto.current_price) {
           foundPrice = crypto.current_price;
-          console.log(' TradingPanel: Setting market price from cryptoData:', foundPrice);
         }
       }
     } else {
@@ -295,7 +255,6 @@ const TradingPanel = ({
         setLastTrade(null);
       }, 5000);
     } catch (error) {
-      console.error('Trade execution failed:', error);
     } finally {
       setIsExecuting(false);
     }
@@ -307,7 +266,6 @@ const TradingPanel = ({
     try {
       await closePosition(symbol);
     } catch (error) {
-      console.error(' TradingPanel: Failed to close position:', error);
     }
   };
 
@@ -428,19 +386,16 @@ const TradingPanel = ({
   const getCurrentPrice = () => {
     // First try Redux real-time price
     if (reduxPrice && reduxPrice.price) {
-      console.log(' TradingPanel: Using Redux real-time price:', reduxPrice.price);
       return reduxPrice.price;
     }
     
     // Fallback to prop-based currentPrice
     if (currentPrice) {
-      console.log(' TradingPanel: Using prop currentPrice:', currentPrice);
       return currentPrice;
     }
     
     // Fallback to data price cache
     if (data && data.price_cache && data.price_cache[currentSymbol]) {
-      console.log(' TradingPanel: Using data price cache:', data.price_cache[currentSymbol].price);
       return data.price_cache[currentSymbol].price;
     }
     
@@ -448,7 +403,6 @@ const TradingPanel = ({
     if (data && data.price_cache) {
       const baseSymbol = currentSymbol.replace('USDT', '');
       if (data.price_cache[baseSymbol]) {
-        console.log(' TradingPanel: Using base symbol price cache:', data.price_cache[baseSymbol].price);
         return data.price_cache[baseSymbol].price;
       }
     }
@@ -459,12 +413,10 @@ const TradingPanel = ({
         c => c.symbol === currentSymbol
       );
       if (crypto && crypto.current_price) {
-        console.log(' TradingPanel: Using cryptoData price:', crypto.current_price);
         return crypto.current_price;
       }
     }
     
-    console.log(' TradingPanel: No price found for symbol:', currentSymbol);
     return null;
   };
 
@@ -523,33 +475,6 @@ const TradingPanel = ({
   // Debug logging for state changes
   useEffect(() => {
     const tradeValue = currentPrice && size ? currentPrice * parseFloat(size) : 0;
-    console.log(' TradingPanel: State updated:', {
-      activeTab,
-      amount,
-      orderType,
-      leverage,
-      marginMode,
-      price,
-      size,
-      sizeUnit,
-      sizeSliderValue,
-      useTpSl,
-      reduceOnly,
-      isExecuting,
-      currentPrice,
-      currentSymbol,
-      paper_balance,
-      trading_balance,
-      effectiveBalance,
-      isLiveMode,
-      positions: Object.keys(positions || {}).length,
-      currentPosition,
-      tradeValue,
-      hasEnoughBalance: currentPrice && size ? currentPrice * parseFloat(size) <= effectiveBalance : false,
-      hasPosition: currentPosition ? Math.abs(currentPosition.amount) > 0 : false,
-      lastTrade,
-      lastTradeId
-    });
   }, [activeTab, amount, orderType, leverage, marginMode, price, size, sizeUnit, sizeSliderValue, useTpSl, reduceOnly, isExecuting, currentPrice, currentSymbol, paper_balance, trading_balance, effectiveBalance, isLiveMode, positions, currentPosition]);
 
   // Handle order type change
@@ -559,20 +484,17 @@ const TradingPanel = ({
     if (newOrderType === 'market') {
       if (currentPrice && typeof currentPrice === 'number' && !isNaN(currentPrice)) {
         setPrice(currentPrice.toFixed(2));
-        console.log(' TradingPanel: Setting market price from currentPrice:', currentPrice.toFixed(2));
       } else if (cryptoData && cryptoData.size > 0) {
         const crypto = Array.from(cryptoData.values()).find(
           c => c.symbol === currentSymbol
         );
         if (crypto && crypto.current_price && typeof crypto.current_price === 'number' && !isNaN(crypto.current_price)) {
           setPrice(crypto.current_price.toFixed(2));
-          console.log(' TradingPanel: Setting market price from crypto data:', crypto.current_price.toFixed(2));
         }
       } else if (data && data.price_cache && data.price_cache[currentSymbol]) {
         const price = data.price_cache[currentSymbol].price;
         if (typeof price === 'number' && !isNaN(price)) {
           setPrice(price.toFixed(2));
-          console.log(' TradingPanel: Setting market price from WebSocket price cache:', price.toFixed(2));
         }
       } else if (data && data.price_cache) {
         const baseSymbol = currentSymbol.replace('USDT', '');
@@ -580,7 +502,6 @@ const TradingPanel = ({
           const price = data.price_cache[baseSymbol].price;
           if (typeof price === 'number' && !isNaN(price)) {
             setPrice(price.toFixed(2));
-            console.log(' TradingPanel: Setting market price from base symbol price cache:', baseSymbol, price.toFixed(2));
           }
         }
       }

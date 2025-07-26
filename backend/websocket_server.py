@@ -21,7 +21,7 @@ from ai_analysis import AIAnalysisManager
 from trading_bot import TradingBot
 from trade_execution import TradeExecutionManager
 from auth import AuthManager
-from trading_manager import TradingManager
+from trading_manager import TradingManager, InsufficientBalanceError
 from bson import ObjectId
 
 def safe_json_serialize(obj):
@@ -84,10 +84,28 @@ class TradingServer:
             'unexpected_disconnects': 0
         }
         
+        # Balance request rate limiting
+        self.balance_cache = {}
+        self.balance_request_timestamps = {}
+        self.balance_cache_duration = 5  # 5 seconds cache
+        
         # Load persisted state on startup
         asyncio.create_task(self.load_persisted_state())
         
         logger.info("Trading Server initialization complete!")
+    
+    def should_use_cached_balance(self, cache_key):
+        """Check if we should use cached balance data"""
+        current_time = time.time()
+        if cache_key in self.balance_cache and cache_key in self.balance_request_timestamps:
+            time_diff = current_time - self.balance_request_timestamps[cache_key]
+            return time_diff < self.balance_cache_duration
+        return False
+    
+    def cache_balance_data(self, cache_key, balance_data):
+        """Cache balance data with timestamp"""
+        self.balance_cache[cache_key] = balance_data
+        self.balance_request_timestamps[cache_key] = time.time()
         
     async def start_server(self):
         """Start the WebSocket server with proper signal handling and port conflict resolution"""
@@ -437,7 +455,40 @@ class TradingServer:
                 # Yield before heavy operation
                 await asyncio.sleep(0)
                 
-                result = await self.trade_execution.execute_paper_trade(trade_data)
+                # Execute trade based on current trading mode
+                if self.trading_manager.trading_mode == 'mock':
+                    result = await self.trade_execution.execute_paper_trade(trade_data)
+                else:
+                    # In live mode, use trading manager for real trades
+                    symbol = trade_data.get('symbol')
+                    direction = trade_data.get('direction', trade_data.get('trade_type', 'buy'))
+                    amount = trade_data.get('amount', 0)
+                    price = trade_data.get('price', 0)
+                    
+                    # Calculate amount in USDT if not provided
+                    amount_usdt = trade_data.get('value_usdt', amount * price)
+                    
+                    live_result = self.trading_manager.place_order(
+                        symbol=symbol,
+                        side=direction.upper(),
+                        order_type='MARKET',
+                        quantity=amount,
+                        price=price
+                    )
+                    
+                    if live_result.get('success'):
+                        result = {
+                            'success': True,
+                            'message': 'Live trade executed successfully',
+                            'trade_data': trade_data,
+                            'order_result': live_result,
+                            'new_balance': self.trading_manager.get_trading_balance('USDT').get('total', 0)
+                        }
+                    else:
+                        result = {
+                            'success': False,
+                            'message': f"Live trade failed: {live_result.get('message', 'Unknown error')}"
+                        }
                 
                 if result['success']:
                     logger.info(f"Trade executed successfully")
@@ -470,18 +521,44 @@ class TradingServer:
                     })
                     
             elif message_type == 'set_trading_mode':
-                # 🔥 NEW: Set global trading mode
-                mode = data.get('mode', 'mock')
-                self.trading_manager.set_trading_mode(mode)
-                logger.info(f"Global trading mode set to: {mode}")
-                
-                await self.safe_send(websocket, {
-                    'type': 'trading_mode_updated',
-                    'data': {
-                        'mode': mode,
-                        'message': f'Trading mode set to {mode}'
-                    }
-                })
+                try:
+                    # Handle both data formats: {mode: 'live'} and {data: {mode: 'live'}}
+                    if 'mode' in data:
+                        mode = data.get('mode')
+                    else:
+                        mode = data.get('data', {}).get('mode')
+                    
+                    if mode not in ['mock', 'live']:
+                        await self.safe_send(websocket, {
+                            'type': 'error',
+                            'data': {'message': 'Invalid trading mode. Must be "mock" or "live"'}
+                        })
+                        return
+                    
+                    self.trading_manager.set_trading_mode(mode)
+                    logger.info(f"Global trading mode set to: {mode}")
+                    
+                    # Test connection for live mode
+                    connection_test = None
+                    if mode == 'live':
+                        connection_test = self.trading_manager.test_connection()
+                    else:
+                        connection_test = {'success': True, 'message': 'Mock mode enabled'}
+                    
+                    await self.safe_send(websocket, {
+                        'type': 'trading_mode_set',
+                        'data': {
+                            'mode': mode,
+                            'connection_test': connection_test
+                        }
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Set trading mode error: {e}")
+                    await self.safe_send(websocket, {
+                        'type': 'error',
+                        'data': {'message': f'Error setting trading mode: {str(e)}'}
+                    })
                 
             elif message_type == 'place_order':
                 # 🔥 NEW: Handle live trading orders
@@ -538,6 +615,15 @@ class TradingServer:
                             'data': {'message': f'Order placement failed: {result.get("message", "Unknown error")}'}
                         })
                         
+                except InsufficientBalanceError as e:
+                    logger.error(f"Insufficient balance for order: {e}")
+                    await self.safe_send(websocket, {
+                        'type': 'insufficient_balance_error',
+                        'data': {
+                            'message': str(e),
+                            'error_details': e.error_data
+                        }
+                    })
                 except Exception as e:
                     logger.error(f"Error placing order: {e}")
                     await self.safe_send(websocket, {
@@ -546,7 +632,19 @@ class TradingServer:
                     })
                     
             elif message_type == 'start_bot':
-                bot_config = data.get('config', {})
+                # Handle both formats: {config: {...}} and {data: {config: {...}}}
+                bot_config = data.get('config', data.get('data', {}).get('config', {}))
+                
+                # 🔥 NEW: Ensure trading mode is set correctly
+                trading_mode = bot_config.get('trading_mode', self.trading_manager.trading_mode)
+                logger.info(f"Starting bot with trading mode: {trading_mode}")
+                
+                # Set the trading mode in the trading manager
+                self.trading_manager.set_trading_mode(trading_mode)
+                
+                # Add trading mode to bot config for reference
+                bot_config['current_trading_mode'] = trading_mode
+                
                 result = await self.trading_bot.start_bot(bot_config)
                 await self.safe_send(websocket, {
                     'type': 'start_bot_response',
@@ -1141,49 +1239,25 @@ class TradingServer:
                         'data': {'message': 'Token verification failed'}
                     })
             
-            # Trading Mode Handlers
-            elif message_type == 'set_trading_mode':
-                try:
-                    mode = data.get('data', {}).get('mode')
-                    
-                    if mode not in ['mock', 'live']:
-                        await self.safe_send(websocket, {
-                            'type': 'error',
-                            'data': {'message': 'Invalid trading mode. Must be "mock" or "live"'}
-                        })
-                        return
-                    
-                    self.trading_manager.set_trading_mode(mode)
-                    
-                    # Test connection for live mode
-                    connection_test = self.trading_manager.test_connection()
-                    
-                    await self.safe_send(websocket, {
-                        'type': 'trading_mode_set',
-                        'data': {
-                            'mode': mode,
-                            'connection_test': connection_test
-                        }
-                    })
-                    
-                except Exception as e:
-                    logger.error(f"Set trading mode error: {e}")
-                    await self.safe_send(websocket, {
-                        'type': 'error',
-                        'data': {'message': f'Failed to set trading mode: {str(e)}'}
-                    })
+            # Trading Mode Handlers (moved to earlier in file to avoid duplicates)
             
             elif message_type == 'get_trading_balance':
-                # Remove debug logging to prevent spam
-                # logger.info(f"[WebSocket] Handling get_trading_balance. Data: {data}")
                 try:
                     asset = data.get('data', {}).get('asset', 'USDT')
                     mode = data.get('mode', 'mock')
+                    cache_key = f"trading_balance_{asset}_{mode}"
                     
-                    # Get balance from trading manager
-                    balance_data = self.trading_manager.get_trading_balance(asset, mode)
+                    # Check if we should use cached data
+                    if self.should_use_cached_balance(cache_key):
+                        balance_data = self.balance_cache[cache_key]
+                        logger.info(f"Using cached balance for {asset} in {mode} mode")
+                    else:
+                        # Get fresh balance from trading manager
+                        balance_data = self.trading_manager.get_trading_balance(asset, mode)
+                        # Cache the result
+                        self.cache_balance_data(cache_key, balance_data)
                     
-                    # Send response
+                    # Send response using safe_send method
                     response = {
                         'type': 'trading_balance',
                         'data': {
@@ -1191,15 +1265,19 @@ class TradingServer:
                             'mode': mode
                         }
                     }
-                    await websocket.send(json.dumps(response))
+                    await self.safe_send(websocket, response)
                     
                 except Exception as e:
                     logger.error(f"Error getting trading balance: {e}")
-                    error_response = {
-                        'type': 'error',
-                        'message': f'Failed to get trading balance: {str(e)}'
-                    }
-                    await websocket.send(json.dumps(error_response))
+                    # Send error response using safe_send method
+                    try:
+                        error_response = {
+                            'type': 'error',
+                            'message': f'Failed to get trading balance: {str(e)}'
+                        }
+                        await self.safe_send(websocket, error_response)
+                    except Exception as send_error:
+                        logger.error(f"Failed to send error response: {send_error}")
             
             elif message_type == 'get_all_trading_balances':
                 try:
@@ -1953,8 +2031,23 @@ class TradingServer:
                     'trade_id': f"rollback_trade_{int(time.time())}_{symbol}"
                 }
                 
-                # Execute new trade
-                paper_trade_result = await self.trade_execution.execute_paper_trade(new_trade_data)
+                # Execute new trade based on trading mode
+                if self.trading_manager.trading_mode == 'mock':
+                    paper_trade_result = await self.trade_execution.execute_paper_trade(new_trade_data)
+                else:
+                    # In live mode, execute via trading manager
+                    trade_amount_usdt = self.trading_bot.bot_config.get('trade_amount_usdt', 50)
+                    live_trade_result = await self.trading_bot.execute_trade(
+                        symbol=symbol,
+                        direction=new_action.lower(),
+                        amount_usdt=trade_amount_usdt,
+                        price=current_price,
+                        trade_type='bot',
+                        confidence_score=new_confidence,
+                        analysis_data={},
+                        trading_mode=self.trading_manager.trading_mode
+                    )
+                    paper_trade_result = live_trade_result
                 
                 if paper_trade_result.get('success'):
                     # Update bot state
@@ -2145,8 +2238,16 @@ class TradingServer:
                                         # Get current market data for pricing
                                         current_price = self.market_data.get_cached_price(symbol.replace('USDT', '').lower())
                                         if current_price:
-                                            # Get current balance
-                                            current_balance = self.trade_execution.get_balance()
+                                            # Get current balance based on trading mode
+                                            if self.trading_manager.trading_mode == 'live':
+                                                # Use actual Binance balance for live trading
+                                                trading_balance = self.trading_manager.get_trading_balance('USDT')
+                                                current_balance = trading_balance.get('total', 0)
+                                                logger.info(f"Using live trading balance: ${current_balance:.2f} from {trading_balance.get('wallet_type', 'UNKNOWN')} wallet")
+                                            else:
+                                                # Use paper balance for mock trading
+                                                current_balance = self.trade_execution.get_balance()
+                                                logger.info(f"Using mock trading balance: ${current_balance:.2f}")
                                             
                                             # Execute the trade
                                             trade_result = await self.trading_bot.execute_bot_trade(symbol, result, current_price, current_balance, self.trading_manager.trading_mode)
@@ -2154,11 +2255,13 @@ class TradingServer:
                                             if trade_result.get('success'):
                                                 logger.info(f"[SUCCESS] Automated trade executed successfully: {trade_result}")
                                                 
-                                                # Execute the trade in paper trading system
+                                                # Only execute paper trade in mock mode
                                                 trade_data = trade_result.get('trade_data', {})
-                                                if trade_data:
+                                                if trade_data and self.trading_manager.trading_mode == 'mock':
                                                     paper_trade_result = await self.trade_execution.execute_paper_trade(trade_data)
                                                     logger.info(f"[PAPER] Paper trade result: {paper_trade_result}")
+                                                elif self.trading_manager.trading_mode == 'live':
+                                                    logger.info(f"[LIVE] Trade already executed via Binance API in live mode: {trade_result.get('order_result', {})}")
                                                 
                                                 # Broadcast trade execution result
                                                 trade_message = {

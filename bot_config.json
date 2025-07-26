@@ -2,7 +2,8 @@
   "max_trades_per_day": 10,
   "trade_amount_usdt": 5,
   "max_amount_per_trade_usdt": 8,
-  "leverage_per_trade": 10,
+  "min_trade_amount_usdt": 10,
+  "leverage_per_trade": 20,
   "profit_target_min": 1,
   "profit_target_max": 1.5,
   "stop_loss_percent": 1.5,
@@ -13,13 +14,14 @@
   "max_concurrent_trades": 20,
   "cooldown_secs": 300,
   "allowed_pairs": [
+    "BTCUSDT",
     "ETHUSDT",
     "SOLUSDT",
+    "XRPUSDT",
+    "BNBUSDT",
     "ADAUSDT",
     "DOTUSDT",
-    "LINKUSDT",
-    "BNBUSDT",
-    "XRPUSDT"
+    "LINKUSDT"
   ],
   "ai_confidence_threshold": 0.65,
   "run_time_minutes": 180,
@@ -47,5 +49,8 @@
     "medium": 0.5,
     "low": 0.25,
     "no_trade": 0.25
-  }
+  },
+  "trading_mode": "live",
+  "is_live_mode": true,
+  "current_trading_mode": "live"
 }

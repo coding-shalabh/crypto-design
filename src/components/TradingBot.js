@@ -22,23 +22,20 @@ import { CiAlignBottom, CiBadgeDollar, CiBag1, CiCalendar, CiChartLine, CiChat1,
 import { CiWallet } from 'react-icons/ci';
 import { MdCandlestickChart } from 'react-icons/md';
 import { toast } from 'react-toastify';
+import tradingService from '../services/tradingService';
 import { GrTarget } from 'react-icons/gr';
 import { useState, useEffect } from 'react';
 
 const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotConfig, getBotConfig, sendMessage, data, lastConnectionCheck, connectionErrorDetails }) => {
-  // Remove debug logging to prevent spam
-  // console.log(' TradingBot: Component initialized with props:', { isConnected, startBot: !!startBot, stopBot: !!stopBot, getBotStatus: !!getBotStatus, updateBotConfig: !!updateBotConfig, getBotConfig: !!getBotConfig });
   
   // Get WebSocket context for real-time updates
   const { lastMessage } = useWebSocket();
   
   // Get trading mode context
   const { isLiveMode, tradingMode } = useTradingMode();
-  // console.log(' TradingBot: Current trading mode:', { isLiveMode, tradingMode });
 
   
   const [botEnabled, setBotEnabled] = useState(false);
-  // console.log(' TradingBot: Initial botEnabled state:', botEnabled);
   
   const [botConfig, setBotConfig] = useState({
     max_trades_per_day: 10,
@@ -68,7 +65,6 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
     signal_sources: ['gpt', 'claude'],
     manual_approval_mode: false
   });
-  // console.log(' TradingBot: Initial botConfig:', botConfig);
   
   const [botStatus, setBotStatus] = useState({
     enabled: false,
@@ -82,22 +78,31 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
     pair_status: {},
     running_duration: 0
   });
-  // console.log(' TradingBot: Initial botStatus:', botStatus);
   
   const [activeTrades, setActiveTrades] = useState({});
-  // console.log(' TradingBot: Initial activeTrades:', activeTrades);
   
   const [tradeHistory, setTradeHistory] = useState([]);
-  // console.log(' TradingBot: Initial tradeHistory length:', tradeHistory.length);
   
   const [analysisLogs, setAnalysisLogs] = useState([]);
-  // console.log(' TradingBot: Initial analysisLogs length:', analysisLogs.length);
   
   const [tradeLogs, setTradeLogs] = useState([]);
-  // console.log(' TradingBot: Initial tradeLogs length:', tradeLogs.length);
   
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [configLoading, setConfigLoading] = useState(false);
+  
+  // Wallet management state
+  const [showWalletModal, setShowWalletModal] = useState(false);
+  const [categorizedBalances, setCategorizedBalances] = useState({});
+  const [selectedWallet, setSelectedWallet] = useState('FUTURES');
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferData, setTransferData] = useState({
+    asset: 'USDT',
+    amount: '',
+    fromWallet: 'SPOT',
+    toWallet: 'FUTURES'
+  });
+  const [showInsufficientBalanceModal, setShowInsufficientBalanceModal] = useState(false);
+  const [insufficientBalanceData, setInsufficientBalanceData] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
 
   // Available trading pairs
@@ -107,29 +112,27 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
   const [configLoaded, setConfigLoaded] = useState(false);
 
   useEffect(() => {
-    // console.log(' TradingBot: useEffect triggered - isConnected:', isConnected);
     if (isConnected) {
-      // console.log(' TradingBot: Connection detected, calling getBotStatus');
       getBotStatus();
       
       // Only load config on first connection to prevent overriding user changes
       if (!configLoaded) {
-        // console.log(' TradingBot: Loading initial configuration');
         getBotConfig(); 
         setConfigLoaded(true);
       }
       
       // Request additional data for all sections
       requestAllData();
+      
+      // Fetch categorized balances when connected
+      fetchCategorizedBalances();
     } else {
-      // console.log(' TradingBot: No connection detected');
     }
   }, [isConnected, getBotStatus, getBotConfig, configLoaded]);
 
   // 🔥 NEW: Sync bot status from global WebSocket data
   useEffect(() => {
     if (data.bot_status) {
-      // console.log(' TradingBot: Syncing bot status from global WebSocket data:', data.bot_status);
       setBotStatus(prevStatus => ({
         ...prevStatus,
         ...data.bot_status
@@ -140,10 +143,8 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
 
   // 🔥 NEW: Handle trading mode changes
   useEffect(() => {
-    // console.log(' TradingBot: Trading mode changed:', { isLiveMode, tradingMode });
     if (isConnected) {
       // Refresh all data when trading mode changes
-      // console.log(' TradingBot: Refreshing data for new trading mode');
       requestAllData();
     }
   }, [tradingMode, isLiveMode, isConnected]);
@@ -168,9 +169,7 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       // Request trade logs with confidence scores
       sendMessage({ type: 'get_trade_logs', limit: 50 });
 
-      // console.log(' TradingBot: All data requests sent');
     } catch (error) {
-      // console.error(' TradingBot: Error requesting data:', error);
     }
   };
 
@@ -193,22 +192,16 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
 
   // Global message handler for bot responses
   const handleBotResponse = (message) => {
-    // console.log(' TradingBot: handleBotResponse called with message:', message);
     const { type, data } = message;
-    // console.log(' TradingBot: Message type:', type, 'Data:', data);
-    // console.log(' TradingBot: Full message object:', JSON.stringify(message, null, 2));
     
     if (type === 'bot_status_response') {
-      // console.log(' TradingBot: Processing bot_status_response:', data);
       setBotStatus(data);
       setBotEnabled(data.enabled);
       
       // 🔥 NEW: Extract trading balance and update data state if available
       if (data.trading_balance) {
-        // console.log(' TradingBot: Updating trading balance from bot status:', data.trading_balance);
         // Note: The data prop is managed by the parent component, so we just log the balance
         // The parent component should handle updating the global data state
-        // console.log(' TradingBot: Trading balance available:', data.trading_balance);
       }
       
       // Convert active_trades array to object with symbol keys
@@ -230,46 +223,44 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
           }
         });
         setActiveTrades(activeTradesObject);
-        // console.log(' TradingBot: Converted active_trades array to object:', activeTradesObject);
       }
       
-      // console.log(' TradingBot: Updated botStatus to:', data);
-      // console.log(' TradingBot: Updated botEnabled to:', data.enabled);
-    } else if (type === 'start_bot_response') {
-      // console.log(' TradingBot: Processing start_bot_response:', data);
+    } else if (type === 'categorized_balances_response') {
+      setCategorizedBalances(data);
+    } else if (type === 'wallet_transfer_result') {
       if (data.success) {
-        // console.log(' TradingBot: Bot start successful, setting botEnabled to true');
+        toast.success(data.message || 'Transfer completed successfully');
+        fetchCategorizedBalances(); // Refresh balances
+      } else {
+        toast.error(data.message || 'Transfer failed');
+      }
+    } else if (type === 'insufficient_balance_error') {
+      setInsufficientBalanceData(data.error_details);
+      setShowInsufficientBalanceModal(true);
+      toast.error(data.message || 'Insufficient balance for trade');
+    } else if (type === 'start_bot_response') {
+      if (data.success) {
         setBotEnabled(true);
         // Get updated bot status immediately after starting
         setTimeout(() => {
-          // console.log(' TradingBot: Getting updated bot status after start');
           getBotStatus();
         }, 1000);
       } else {
-        // console.log(' TradingBot: Bot start failed:', data.error);
       }
     } else if (type === 'stop_bot_response') {
-      // console.log(' TradingBot: Processing stop_bot_response:', data);
       if (data.success) {
-        // console.log(' TradingBot: Bot stop successful, setting botEnabled to false');
         setBotEnabled(false);
         getBotStatus();
       } else {
-        // console.log(' TradingBot: Bot stop failed:', data.error);
       }
     } else if (type === 'update_bot_config_response') {
-      // console.log(' TradingBot: Processing update_bot_config_response:', data);
       if (data.success) {
-        // console.log(' TradingBot: Config update successful, closing modal');
         setShowConfigModal(false);
         getBotStatus();
       } else {
-        // console.log(' TradingBot: Config update failed:', data.error);
       }
     } else if (type === 'bot_config_response') {
-      // console.log(' TradingBot: Processing bot_config_response:', data);
       if (data.success && data.config) {
-        // console.log(' TradingBot: Loading saved bot configuration:', data.config);
         setBotConfig(prevConfig => {
           // Only update if significantly different from current config
           // This prevents overriding user changes with default values
@@ -278,23 +269,18 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
           );
           
           if (hasSignificantChanges || !configLoaded) {
-            // console.log(' TradingBot: Applying configuration changes');
             return data.config;
           } else {
-            // console.log(' TradingBot: No significant config changes, keeping current');
             return prevConfig;
           }
         });
       }
     } else if (type === 'bot_status_update') {
-      // console.log(' TradingBot: Processing bot_status_update:', data);
       setBotStatus(prev => {
         const newStatus = { ...prev, ...data };
-        // console.log(' TradingBot: Updated botStatus from', prev, 'to', newStatus);
         return newStatus;
       });
       setBotEnabled(data.enabled);
-      // console.log(' TradingBot: Updated botEnabled to:', data.enabled);
     } else if (type === 'bot_trade_executed') {
       // Add/update active trade for this symbol
       setActiveTrades(prev => {
@@ -329,7 +315,6 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       }
       getBotStatus();
     } else if (type === 'ai_analysis_response') {
-      // console.log(' TradingBot: Processing ai_analysis_response:', data);
       
       // Create analysis log entry
       const analysisLog = {
@@ -346,11 +331,9 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       
       setAnalysisLogs(prev => {
         const newLogs = [analysisLog, ...prev.slice(0, 49)];
-        // console.log(' TradingBot: Added analysis log. New logs length:', newLogs.length);
         return newLogs;
       });
     } else if (type === 'ai_opportunity_alert') {
-      // console.log(' TradingBot: Processing ai_opportunity_alert:', data);
       
       // Create trade opportunity log entry
       const tradeLog = {
@@ -365,11 +348,9 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       
       setTradeLogs(prev => {
         const newLogs = [tradeLog, ...prev.slice(0, 49)];
-        // console.log(' TradingBot: Added trade opportunity log. New logs length:', newLogs.length);
         return newLogs;
       });
     } else if (type === 'automated_trade_executed') {
-      // console.log(' TradingBot: Processing automated_trade_executed:', data);
       
       // Create successful trade log entry
       const tradeLog = {
@@ -384,7 +365,6 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       
       setTradeLogs(prev => {
         const newLogs = [tradeLog, ...prev.slice(0, 49)];
-        // console.log(' TradingBot: Added automated trade log. New logs length:', newLogs.length);
         return newLogs;
       });
       
@@ -392,7 +372,6 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       if (data.trade_result && data.trade_result.trade_data) {
         setActiveTrades(prev => {
           const newTrades = { ...prev, [data.symbol]: data.trade_result.trade_data };
-          // console.log(' TradingBot: Updated activeTrades:', newTrades);
           return newTrades;
         });
       }
@@ -400,7 +379,6 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       // Refresh bot status
       getBotStatus();
     } else if (type === 'auto_close_notification') {
-      // console.log('🎯 TradingBot: Processing auto_close_notification:', data);
       
       // Create auto-close notification log entry
       const tradeLog = {
@@ -416,15 +394,12 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       
       setTradeLogs(prev => {
         const newLogs = [tradeLog, ...prev.slice(0, 49)];
-        // console.log(' TradingBot: Added auto-close notification log. New logs length:', newLogs.length);
         return newLogs;
       });
       
       // Show prominent auto-close notification
-      // console.log('🎯 AUTO-CLOSE NOTIFICATION:', data.message);
       
     } else if (type === 'automated_trade_failed') {
-      // console.log(' TradingBot: Processing automated_trade_failed:', data);
       
       // Create failed trade log entry
       const tradeLog = {
@@ -439,17 +414,14 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       
       setTradeLogs(prev => {
         const newLogs = [tradeLog, ...prev.slice(0, 49)];
-        // console.log(' TradingBot: Added failed trade log. New logs length:', newLogs.length);
         return newLogs;
       });
     } else if (type === 'trade_closed') {
-      // console.log(' TradingBot: Processing trade_closed:', data);
       
       // Remove from active trades
       setActiveTrades(prev => {
         const newTrades = { ...prev };
         delete newTrades[data.symbol];
-        // console.log(' TradingBot: Removed closed trade from activeTrades:', newTrades);
         return newTrades;
       });
       
@@ -473,20 +445,17 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       
       setTradeLogs(prev => {
         const newLogs = [tradeLog, ...prev.slice(0, 49)];
-        // console.log(' TradingBot: Added trade closure log. New logs length:', newLogs.length);
         return newLogs;
       });
       
       // Show auto-close notification if applicable
       if (isAutoClose) {
         // You can add a toast notification here if you have a notification system
-        // console.log('🎯 AUTO-CLOSE TRIGGERED:', data.notification || message);
       }
       
       // Refresh bot status
       getBotStatus();
     } else if (type === 'rollback_trade_executed') {
-      // console.log(' TradingBot: Processing rollback_trade_executed:', data);
       
       // Create rollback trade log entry
       const tradeLog = {
@@ -501,7 +470,6 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       
       setTradeLogs(prev => {
         const newLogs = [tradeLog, ...prev.slice(0, 49)];
-        // console.log(' TradingBot: Added rollback trade log. New logs length:', newLogs.length);
         return newLogs;
       });
       
@@ -519,7 +487,6 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       
       setAnalysisLogs(prev => {
         const newLogs = [logEntry, ...prev.slice(0, 49)];
-        // console.log(' TradingBot: Added analysis log. New logs length:', newLogs.length);
         return newLogs;
       });
     } else if (type === 'trade_log') {
@@ -540,62 +507,63 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
       
       setTradeLogs(prev => {
         const newLogs = [logEntry, ...prev.slice(0, 49)];
-        // console.log(' TradingBot: Added trade log. New logs length:', newLogs.length);
         return newLogs;
       });
     } else if (type === 'trade_history_response') {
-      // console.log(' TradingBot: Processing trade_history_response:', data);
       if (data.trades) {
         setTradeHistory(data.trades);
       }
     } else if (type === 'analysis_logs_response') {
-      // console.log(' TradingBot: Processing analysis_logs_response:', data);
       if (data.logs) {
         setAnalysisLogs(data.logs);
       }
     } else if (type === 'trade_logs_response') {
-      // console.log(' TradingBot: Processing trade_logs_response:', data);
       if (data.logs) {
         setTradeLogs(data.logs);
       }
     } else if (type === 'positions_response') {
-      // console.log(' TradingBot: Processing positions_response:', data);
       // Update active trades from positions data
       if (data.positions) {
         setActiveTrades(data.positions);
       }
     } else {
-      // console.log(' TradingBot: Unknown message type:', type);
     }
   };
 
   // Set up WebSocket message handler
   useEffect(() => {
-    // console.log(' TradingBot: Setting up WebSocket message handler');
     
+    // Set global bot response handler for WebSocket context
+    window.handleBotResponse = handleBotResponse;
+    
+    // Clean up on unmount
+    return () => {
+      if (window.handleBotResponse === handleBotResponse) {
+        delete window.handleBotResponse;
+      }
+    };
+  }, []);
+
+  // Handle incoming WebSocket messages  
+  useEffect(() => {
     if (lastMessage) {
-      // console.log(' TradingBot: Received lastMessage:', lastMessage);
       handleBotResponse(lastMessage);
     }
   }, [lastMessage]);
 
   // Real-time timer update for running duration
   useEffect(() => {
-    // console.log(' TradingBot: Setting up timer effect - botEnabled:', botEnabled, 'start_time:', botStatus.start_time);
     let timerInterval;
     
     if (botEnabled && botStatus.start_time) {
-      // console.log(' TradingBot: Starting timer interval');
       timerInterval = setInterval(() => {
         const currentTime = Math.floor(Date.now() / 1000);
         const startTime = Math.floor(botStatus.start_time);
         const runningDuration = currentTime - startTime;
         
-        // console.log(' TradingBot: Timer update - currentTime:', currentTime, 'startTime:', startTime, 'runningDuration:', runningDuration);
         
         setBotStatus(prev => {
           const newStatus = { ...prev, running_duration: runningDuration };
-          // console.log(' TradingBot: Updated running_duration to:', runningDuration);
           return newStatus;
         });
       }, 1000); // Update every second
@@ -603,17 +571,76 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
     
     return () => {
       if (timerInterval) {
-        // console.log(' TradingBot: Clearing timer interval');
         clearInterval(timerInterval);
       }
     };
   }, [botEnabled, botStatus.start_time]);
 
   const handleStartBot = async () => {
-    // console.log(' TradingBot: handleStartBot called');
     if (!isConnected) {
-      // console.log(' TradingBot: Cannot start bot - not connected');
+      toast.error('Cannot start bot - WebSocket not connected');
       return;
+    }
+    
+    // Check futures balance if in live mode
+    if (isLiveMode) {
+      try {
+        const futuresBalance = await tradingService.getTradingBalance('USDT');
+        
+        // Handle API credential errors
+        if (futuresBalance && futuresBalance.error === 'API credentials not configured') {
+          toast.error('Cannot start bot: Binance API credentials are not configured. Please set up your API keys first.');
+          return;
+        }
+        
+        // Check if futures balance is zero or very low
+        if (futuresBalance && (futuresBalance.total === 0 || futuresBalance.total < 5)) {
+          // Get spot balance for transfer suggestions
+          try {
+            const allBalances = await tradingService.getAllTradingBalances();
+            const spotUSDT = allBalances?.balances?.spot?.USDT;
+            
+            let availableForTransfer = 0;
+            if (spotUSDT && spotUSDT.free > 0) {
+              availableForTransfer = spotUSDT.free;
+            }
+            
+            // Show insufficient balance modal with transfer suggestions
+            setInsufficientBalanceData({
+              required_amount: Math.max(50, futuresBalance.total === 0 ? 100 : 50), // Minimum suggested amount
+              available_amount: futuresBalance.total || 0,
+              asset: 'USDT',
+              current_wallet: 'FUTURES',
+              transfer_suggestions: availableForTransfer > 0 ? [{
+                from_wallet: 'SPOT',
+                to_wallet: 'FUTURES',
+                available_amount: availableForTransfer
+              }] : [],
+              message: futuresBalance.total === 0 
+                ? 'Your Futures wallet is empty. You need USDT in your Futures wallet to start live trading.'
+                : `Your Futures wallet balance is very low (${futuresBalance.total} USDT). We recommend having at least 50 USDT for effective trading.`
+            });
+            setShowInsufficientBalanceModal(true);
+            return;
+          } catch (balanceError) {
+            toast.error('Cannot start bot: Futures wallet balance is insufficient and unable to check transfer options.');
+            return;
+          }
+        }
+        
+        if (futuresBalance && futuresBalance.total < 20) {
+          const proceed = window.confirm(
+            `Warning: Your futures wallet balance is low (${futuresBalance.total} USDT). ` +
+            'We recommend having at least 20 USDT for effective trading. Do you want to proceed anyway?'
+          );
+          if (!proceed) {
+            return;
+          }
+        }
+      } catch (error) {
+        toast.error('Cannot start bot: Failed to verify futures balance. Please check your connection and API credentials.');
+        return;
+      }
     }
     
     const confirmed = window.confirm(
@@ -621,11 +648,9 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
     );
     
     if (!confirmed) {
-      // console.log(' TradingBot: User cancelled bot start');
       return;
     }
     
-    // console.log(' TradingBot: Starting bot with config:', botConfig);
     try {
       // Include trading mode in the config
       const configWithMode = {
@@ -633,18 +658,14 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
         trading_mode: tradingMode,
         is_live_mode: isLiveMode
       };
-      // console.log(' TradingBot: Starting bot with mode-aware config:', configWithMode);
       await startBot(configWithMode);
-      // console.log(' TradingBot: startBot call completed');
     } catch (error) {
-      // console.error(' TradingBot: Error starting bot:', error);
+      toast.error('Failed to start bot: ' + error.message);
     }
   };
 
   const handleStopBot = async () => {
-    // console.log(' TradingBot: handleStopBot called');
     if (!isConnected) {
-      // console.log(' TradingBot: Cannot stop bot - not connected');
       return;
     }
     
@@ -653,29 +674,22 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
     );
     
     if (!confirmed) {
-      // console.log(' TradingBot: User cancelled bot stop');
       return;
     }
     
-    // console.log(' TradingBot: Stopping bot');
     try {
       await stopBot();
-      // console.log(' TradingBot: stopBot call completed');
     } catch (error) {
-      // console.error(' TradingBot: Error stopping bot:', error);
     }
   };
 
   const handleUpdateConfig = async (newConfig) => {
-    // console.log(' TradingBot: handleUpdateConfig called with:', newConfig);
     if (!isConnected) {
-      // console.log(' TradingBot: Cannot update config - not connected');
       toast.error('Cannot update configuration - not connected to server');
       return;
     }
     
     setConfigLoading(true);
-    // console.log(' TradingBot: Set configLoading to true');
     try {
       // Include trading mode in the config
       const configWithMode = {
@@ -683,16 +697,66 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
         trading_mode: tradingMode,
         is_live_mode: isLiveMode
       };
-      // console.log(' TradingBot: Updating config with mode:', configWithMode);
       await updateBotConfig(configWithMode);
-      // console.log(' TradingBot: updateBotConfig call completed');
       toast.success('Configuration saved successfully!');
     } catch (error) {
-      // console.error(' TradingBot: Error updating bot config:', error);
       toast.error('Failed to save configuration. Please try again.');
     } finally {
       setConfigLoading(false);
-      // console.log(' TradingBot: Set configLoading to false');
+    }
+  };
+
+  // Wallet management functions
+  const fetchCategorizedBalances = async () => {
+    try {
+      if (sendMessage) {
+        sendMessage({
+          type: 'get_categorized_balances'
+        });
+      }
+    } catch (error) {
+      toast.error('Failed to fetch wallet balances');
+    }
+  };
+
+  const executeTransfer = async () => {
+    try {
+      if (!transferData.asset || !transferData.amount || !transferData.fromWallet || !transferData.toWallet) {
+        toast.error('Please fill in all transfer details');
+        return;
+      }
+
+      if (parseFloat(transferData.amount) <= 0) {
+        toast.error('Transfer amount must be greater than 0');
+        return;
+      }
+
+      if (transferData.fromWallet === transferData.toWallet) {
+        toast.error('Source and destination wallets cannot be the same');
+        return;
+      }
+
+      if (sendMessage) {
+        sendMessage({
+          type: 'transfer_between_wallets',
+          data: {
+            asset: transferData.asset,
+            amount: parseFloat(transferData.amount),
+            from_wallet: transferData.fromWallet,
+            to_wallet: transferData.toWallet
+          }
+        });
+        
+        toast.info('Transfer initiated...');
+        setShowTransferModal(false);
+        
+        // Refresh balances after transfer
+        setTimeout(() => {
+          fetchCategorizedBalances();
+        }, 2000);
+      }
+    } catch (error) {
+      toast.error('Failed to execute transfer');
     }
   };
 
@@ -776,10 +840,16 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
 
         {/* Real-time Stats Grid */}
         <div className="stats-grid">
-          <div className="stat-card">
+          <div className="stat-card wallet-card" onClick={() => setShowWalletModal(true)}>
             <div className="stat-icon"><CiDollar/></div>
-            <div className="stat-label">Current Balance</div>
+            <div className="stat-label">
+              Current Balance 
+              <span className="wallet-type">
+                ({data?.trading_balance?.wallet_type || 'UNKNOWN'})
+              </span>
+            </div>
             <div className="stat-value">{formatCurrency(balance)}</div>
+            <div className="wallet-hint">Click to manage wallets</div>
           </div>
           <div className="stat-card">
             <div className="stat-icon"><CiWavePulse1/></div>
@@ -925,7 +995,6 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
             {positionEntries.map(([symbol, position]) => {
               // Ensure position is an object and extract values safely
               if (!position || typeof position !== 'object') {
-                // console.warn('Invalid position data for symbol:', symbol, position);
                 return null;
               }
 
@@ -1623,6 +1692,350 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
     </div>
   );
 
+  const renderWalletModal = () => {
+    const formatCurrency = (value) => {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 6
+      }).format(value);
+    };
+
+    return (
+      <div className="modal-overlay" onClick={() => setShowWalletModal(false)}>
+        <div className="modal-content wallet-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>Wallet Management</h3>
+            <button className="close-btn" onClick={() => setShowWalletModal(false)}>×</button>
+          </div>
+          
+          <div className="wallet-modal-body">
+            <div className="wallet-tabs">
+              {Object.keys(categorizedBalances).map(walletType => (
+                <button
+                  key={walletType}
+                  className={`wallet-tab ${selectedWallet === walletType ? 'active' : ''}`}
+                  onClick={() => setSelectedWallet(walletType)}
+                >
+                  {walletType}
+                </button>
+              ))}
+            </div>
+            
+            <div className="wallet-content">
+              {categorizedBalances[selectedWallet] && (
+                <div className="wallet-section">
+                  <h4>{categorizedBalances[selectedWallet].name}</h4>
+                  <div className="balance-list">
+                    {categorizedBalances[selectedWallet].balances
+                      .filter(balance => parseFloat(balance.total) > 0.001)
+                      .map(balance => (
+                        <div key={balance.asset} className="balance-item">
+                          <div className="balance-asset">{balance.asset}</div>
+                          <div className="balance-amounts">
+                            <div className="balance-total">
+                              Total: {parseFloat(balance.total).toFixed(6)}
+                            </div>
+                            <div className="balance-free">
+                              Free: {parseFloat(balance.free).toFixed(6)}
+                            </div>
+                            {parseFloat(balance.locked) > 0 && (
+                              <div className="balance-locked">
+                                Locked: {parseFloat(balance.locked).toFixed(6)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    }
+                    {(!categorizedBalances[selectedWallet].balances || 
+                      categorizedBalances[selectedWallet].balances.filter(b => parseFloat(b.total) > 0.001).length === 0) && (
+                      <div className="no-balances">No significant balances found</div>
+                    )}
+                  </div>
+                  
+                  <div className="total-value">
+                    Total USDT Value: {formatCurrency(categorizedBalances[selectedWallet].total_usdt || 0)}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="wallet-actions">
+              <button 
+                className="btn-primary"
+                onClick={() => setShowTransferModal(true)}
+              >
+                Transfer Funds
+              </button>
+              <button 
+                className="btn-primary"
+                onClick={fetchCategorizedBalances}
+              >
+                Refresh Balances
+              </button>
+              <button 
+                className="btn-secondary"
+                onClick={() => setShowWalletModal(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderTransferModal = () => {
+    const getAvailableAssets = () => {
+      const assets = new Set();
+      Object.values(categorizedBalances).forEach(wallet => {
+        if (wallet.balances) {
+          wallet.balances.forEach(balance => {
+            if (parseFloat(balance.total) > 0.001) {
+              assets.add(balance.asset);
+            }
+          });
+        }
+      });
+      return Array.from(assets).sort();
+    };
+
+    const getMaxTransferAmount = () => {
+      const fromWalletData = categorizedBalances[transferData.fromWallet];
+      if (!fromWalletData || !fromWalletData.balances) return 0;
+      
+      const assetBalance = fromWalletData.balances.find(b => b.asset === transferData.asset);
+      return assetBalance ? parseFloat(assetBalance.free) : 0;
+    };
+
+    return (
+      <div className="modal-overlay" onClick={() => setShowTransferModal(false)}>
+        <div className="modal-content transfer-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>Transfer Funds Between Wallets</h3>
+            <button className="close-btn" onClick={() => setShowTransferModal(false)}>×</button>
+          </div>
+          
+          <div className="transfer-modal-body">
+            <div className="transfer-form">
+              <div className="form-row">
+                <label>Asset</label>
+                <select 
+                  value={transferData.asset} 
+                  onChange={(e) => setTransferData(prev => ({ ...prev, asset: e.target.value }))}
+                >
+                  {getAvailableAssets().map(asset => (
+                    <option key={asset} value={asset}>{asset}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-row">
+                <label>From Wallet</label>
+                <select 
+                  value={transferData.fromWallet} 
+                  onChange={(e) => setTransferData(prev => ({ ...prev, fromWallet: e.target.value }))}
+                >
+                  {Object.keys(categorizedBalances).map(walletType => (
+                    <option key={walletType} value={walletType}>{walletType}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-row">
+                <label>To Wallet</label>
+                <select 
+                  value={transferData.toWallet} 
+                  onChange={(e) => setTransferData(prev => ({ ...prev, toWallet: e.target.value }))}
+                >
+                  {Object.keys(categorizedBalances).filter(w => w !== transferData.fromWallet).map(walletType => (
+                    <option key={walletType} value={walletType}>{walletType}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-row">
+                <label>
+                  Amount 
+                  <span className="balance-info">
+                    (Available: {getMaxTransferAmount().toFixed(6)} {transferData.asset})
+                  </span>
+                </label>
+                <div className="amount-input-container">
+                  <input 
+                    type="number" 
+                    step="0.000001"
+                    min="0"
+                    max={getMaxTransferAmount()}
+                    value={transferData.amount} 
+                    onChange={(e) => setTransferData(prev => ({ ...prev, amount: e.target.value }))}
+                    placeholder="Enter amount"
+                  />
+                  <button 
+                    className="max-btn"
+                    onClick={() => setTransferData(prev => ({ ...prev, amount: getMaxTransferAmount().toString() }))}
+                  >
+                    MAX
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <div className="transfer-actions">
+              <button 
+                className="btn-primary"
+                onClick={executeTransfer}
+                disabled={!transferData.amount || parseFloat(transferData.amount) <= 0}
+              >
+                Execute Transfer
+              </button>
+              <button 
+                className="btn-secondary"
+                onClick={() => setShowTransferModal(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderInsufficientBalanceModal = () => {
+    if (!insufficientBalanceData) return null;
+
+    const {
+      required_amount,
+      available_amount,
+      asset,
+      current_wallet,
+      transfer_suggestions,
+      message
+    } = insufficientBalanceData;
+
+    const handleQuickTransfer = (suggestion) => {
+      const transferAmount = Math.min(
+        suggestion.available_amount,
+        Math.max(required_amount - available_amount, 50) // Transfer at least 50 USDT or the shortage
+      );
+      
+      setTransferData({
+        asset: asset,
+        amount: transferAmount.toFixed(2),
+        fromWallet: suggestion.from_wallet,
+        toWallet: suggestion.to_wallet
+      });
+      setShowInsufficientBalanceModal(false);
+      setShowTransferModal(true);
+    };
+
+    return (
+      <div className="modal-overlay" onClick={() => setShowInsufficientBalanceModal(false)}>
+        <div className="modal-content insufficient-balance-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>Insufficient Balance</h3>
+            <button className="close-btn" onClick={() => setShowInsufficientBalanceModal(false)}>×</button>
+          </div>
+          
+          <div className="insufficient-balance-body">
+            {message && (
+              <div className="balance-message">
+                <p>{message}</p>
+              </div>
+            )}
+            
+            <div className="balance-summary">
+              <h4>Balance Information</h4>
+              <div className="balance-info-grid">
+                <div className="balance-info-item">
+                  <span className="label">Recommended:</span>
+                  <span className="value">{required_amount?.toFixed(2)} {asset}</span>
+                </div>
+                <div className="balance-info-item">
+                  <span className="label">Available in {current_wallet}:</span>
+                  <span className="value">{available_amount?.toFixed(2)} {asset}</span>
+                </div>
+                {available_amount < required_amount && (
+                  <div className="balance-info-item">
+                    <span className="label">Need to Transfer:</span>
+                    <span className="value shortage">{(required_amount - available_amount)?.toFixed(2)} {asset}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {transfer_suggestions && transfer_suggestions.length > 0 && (
+              <div className="transfer-suggestions">
+                <h4>Transfer Options</h4>
+                <p>You have sufficient balance in other wallets. Quick transfer options:</p>
+                <div className="suggestions-list">
+                  {transfer_suggestions.map((suggestion, index) => {
+                    const transferAmount = Math.min(
+                      suggestion.available_amount,
+                      Math.max(required_amount - available_amount, 50)
+                    );
+                    
+                    return (
+                      <div key={index} className="suggestion-item">
+                        <div className="suggestion-info">
+                          <div className="suggestion-title">
+                            Transfer from {suggestion.from_wallet} Wallet
+                          </div>
+                          <div className="suggestion-details">
+                            Available: {suggestion.available_amount?.toFixed(2)} {asset}
+                          </div>
+                        </div>
+                        <button 
+                          className="btn-primary suggestion-btn"
+                          onClick={() => handleQuickTransfer(suggestion)}
+                        >
+                          Transfer {transferAmount.toFixed(2)} {asset}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {(!transfer_suggestions || transfer_suggestions.length === 0) && (
+              <div className="no-options">
+                <h4>No Transfer Options Available</h4>
+                <p>You don't have sufficient {asset} balance in your Spot wallet to transfer to Futures.</p>
+                <p>Please deposit {asset} to your Binance account first, then you can transfer to your Futures wallet.</p>
+                <div className="deposit-info">
+                  <small>💡 Tip: You can deposit {asset} directly to your Spot wallet on Binance, then use the transfer feature to move it to Futures for trading.</small>
+                </div>
+              </div>
+            )}
+            
+            <div className="modal-actions">
+              <button 
+                className="btn-primary"
+                onClick={() => {
+                  setShowInsufficientBalanceModal(false);
+                  setShowWalletModal(true);
+                }}
+              >
+                View All Wallets
+              </button>
+              <button 
+                className="btn-secondary"
+                onClick={() => setShowInsufficientBalanceModal(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="trading-bot-container">
       <div className="bot-header">
@@ -1670,6 +2083,15 @@ const TradingBot = ({ isConnected, startBot, stopBot, getBotStatus, updateBotCon
 
       {/* Configuration Modal */}
       {showConfigModal && renderConfigModal()}
+      
+      {/* Wallet Management Modal */}
+      {showWalletModal && renderWalletModal()}
+      
+      {/* Transfer Modal */}
+      {showTransferModal && renderTransferModal()}
+      
+      {/* Insufficient Balance Modal */}
+      {showInsufficientBalanceModal && renderInsufficientBalanceModal()}
     </div>
   );
 };

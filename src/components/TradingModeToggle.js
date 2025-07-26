@@ -17,6 +17,9 @@ const TradingModeToggle = ({ onModeChange }) => {
   const [futuresBalance, setFuturesBalance] = useState(null);
   const [transferAmount, setTransferAmount] = useState('');
   const [transferLoading, setTransferLoading] = useState(false);
+  const [spotBalance, setSpotBalance] = useState(null);
+  const [availableCoins, setAvailableCoins] = useState(['USDT']);
+  const [selectedCoin, setSelectedCoin] = useState('USDT');
   const { socket } = useWebSocket();
 
   useEffect(() => {
@@ -30,28 +33,72 @@ const TradingModeToggle = ({ onModeChange }) => {
       onModeChange(isLiveMode ? 'live' : 'mock');
     }
     
-    // Set mode in trading service
-    if (socket) {
-      tradingService.setTradingMode(isLiveMode ? 'live' : 'mock').catch(console.error);
-    }
-    
-    // Check futures balance if in live mode
+    // Check futures balance if in live mode (with debouncing)
     if (isLiveMode && socket) {
-      checkFuturesBalance();
+      const timeoutId = setTimeout(() => {
+        checkFuturesBalance();
+        checkSpotBalance();
+      }, 200); // 200ms debounce for balance checks
+      
+      return () => clearTimeout(timeoutId);
     }
   }, [onModeChange, socket, isLiveMode]);
 
   const checkFuturesBalance = async () => {
     try {
-      const balance = await tradingService.getTradingBalance('USDT');
+      const balance = await tradingService.getTradingBalance(selectedCoin);
       setFuturesBalance(balance);
       
       // Show zero balance modal if futures balance is 0 and we're in live mode
-      if (balance && balance.total === 0 && balance.wallet_type === 'FUTURES') {
+      if (balance && balance.total === 0 && balance.wallet_type === 'FUTURES' && isLiveMode) {
         setShowZeroBalanceModal(true);
       }
     } catch (error) {
-      console.error('Failed to check futures balance:', error);
+      // Set a fallback balance to prevent undefined errors
+      setFuturesBalance({
+        asset: selectedCoin,
+        free: 0,
+        locked: 0,
+        total: 0,
+        wallet_type: 'ERROR',
+        error: error.message
+      });
+    }
+  };
+
+  const checkSpotBalance = async () => {
+    try {
+      // Get all wallet balances to find available coins
+      const response = await tradingService.getAllTradingBalances();
+      
+      if (response && response.balances) {
+        // Filter coins with balance > 0
+        const coinsWithBalance = Object.keys(response.balances.spot || {})
+          .filter(coin => response.balances.spot[coin].total > 0);
+        setAvailableCoins(['USDT', ...coinsWithBalance.filter(coin => coin !== 'USDT')]);
+        
+        // Set USDT spot balance
+        const usdtSpotBalance = response.balances.spot?.USDT;
+        if (usdtSpotBalance) {
+          setSpotBalance(usdtSpotBalance);
+        }
+      }
+    } catch (error) {
+      // Set fallback balance
+      setSpotBalance({
+        asset: 'USDT',
+        free: 0,
+        locked: 0,
+        total: 0,
+        wallet_type: 'ERROR',
+        error: error.message
+      });
+    }
+  };
+
+  const setMaxAmount = () => {
+    if (spotBalance && spotBalance.free > 0) {
+      setTransferAmount(spotBalance.free.toString());
     }
   };
 
@@ -68,15 +115,16 @@ const TradingModeToggle = ({ onModeChange }) => {
   const confirmLiveTrading = async () => {
     setIsLoading(true);
     try {
-      const result = await tradingService.setTradingMode('live');
-      toggleTradingMode(); // Update global state
-      setConnectionStatus(result.connection_test);
+      // Just update global state - the context will handle sending to backend
+      toggleTradingMode(); // This will trigger TradingModeContext to send the mode change
       setShowConfirmation(false);
       
       // Check futures balance after switching to live
       await checkFuturesBalance();
+      
+      // Set a simple success status
+      setConnectionStatus({ success: true, message: 'Live trading enabled' });
     } catch (error) {
-      console.error('Failed to switch to live trading:', error);
       setConnectionStatus({ success: false, message: error.message });
     } finally {
       setIsLoading(false);
@@ -89,26 +137,31 @@ const TradingModeToggle = ({ onModeChange }) => {
       return;
     }
 
+    if (spotBalance && parseFloat(transferAmount) > spotBalance.free) {
+      alert(`Transfer amount exceeds available balance (${spotBalance.free} ${selectedCoin})`);
+      return;
+    }
+
     setTransferLoading(true);
     try {
       const result = await tradingService.transferBetweenWallets(
-        'USDT',
+        selectedCoin,
         parseFloat(transferAmount),
         'SPOT',
         'FUTURES'
       );
 
       if (result.success) {
-        alert(`Successfully transferred ${transferAmount} USDT to Futures wallet`);
+        alert(`Successfully transferred ${transferAmount} ${selectedCoin} to Futures wallet`);
         setShowZeroBalanceModal(false);
         setTransferAmount('');
-        // Refresh balance
+        // Refresh balances
         await checkFuturesBalance();
+        await checkSpotBalance();
       } else {
         alert(`Transfer failed: ${result.message}`);
       }
     } catch (error) {
-      console.error('Transfer failed:', error);
       alert(`Transfer failed: ${error.message}`);
     } finally {
       setTransferLoading(false);
@@ -147,7 +200,13 @@ const TradingModeToggle = ({ onModeChange }) => {
           
           <button 
             className="balance-button"
-            onClick={() => setShowBalances(true)}
+            onClick={() => {
+              if (isLiveMode) {
+                checkFuturesBalance();
+                checkSpotBalance();
+              }
+              setShowBalances(true);
+            }}
             title="View Categorized Balances"
           >
             <FaWallet className="wallet-icon" />
@@ -227,21 +286,46 @@ const TradingModeToggle = ({ onModeChange }) => {
               </p>
               
               <div className="transfer-form">
-                <label>Transfer Amount (USDT):</label>
-                <input
-                  type="number"
-                  value={transferAmount}
-                  onChange={(e) => setTransferAmount(e.target.value)}
-                  placeholder="Enter amount to transfer"
-                  min="0"
-                  step="0.01"
-                />
+                <label>Select Asset:</label>
+                <select 
+                  value={selectedCoin} 
+                  onChange={(e) => setSelectedCoin(e.target.value)}
+                  className="coin-selector"
+                >
+                  {availableCoins.map(coin => (
+                    <option key={coin} value={coin}>{coin}</option>
+                  ))}
+                </select>
+                
+                <label>Transfer Amount ({selectedCoin}):</label>
+                <div className="amount-input-group">
+                  <input
+                    type="number"
+                    value={transferAmount}
+                    onChange={(e) => setTransferAmount(e.target.value)}
+                    placeholder={`Enter amount to transfer`}
+                    min="0"
+                    step="0.01"
+                  />
+                  <button 
+                    type="button" 
+                    className="max-button"
+                    onClick={setMaxAmount}
+                    disabled={!spotBalance || spotBalance.free <= 0}
+                  >
+                    MAX
+                  </button>
+                </div>
               </div>
               
               <div className="balance-info">
                 <div className="balance-row">
+                  <span>Spot Balance:</span>
+                  <span>{spotBalance ? `${spotBalance.free} ${selectedCoin}` : 'Loading...'}</span>
+                </div>
+                <div className="balance-row">
                   <span>Futures Balance:</span>
-                  <span>0 USDT</span>
+                  <span>{futuresBalance ? `${futuresBalance.total} ${selectedCoin}` : '0 USDT'}</span>
                 </div>
                 <div className="balance-note">
                   💡 You can also transfer manually from the Binance website

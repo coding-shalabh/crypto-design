@@ -4,10 +4,21 @@ import logging
 from typing import Dict, List, Optional
 from datetime import datetime
 from decimal import Decimal
+from dotenv import load_dotenv
+import os
 from binance_service import BinanceService
 from database import DatabaseManager
 
+# Load environment variables
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
+
 logger = logging.getLogger(__name__)
+
+class InsufficientBalanceError(Exception):
+    """Custom exception for insufficient balance with transfer suggestions"""
+    def __init__(self, message, error_data=None):
+        super().__init__(message)
+        self.error_data = error_data or {}
 
 class TradingManager:
     def __init__(self):
@@ -28,6 +39,50 @@ class TradingManager:
         """Set trading mode to 'mock' or 'live'"""
         self.trading_mode = mode
         logger.info(f"Trading mode set to: {mode}")
+    
+    def verify_trading_readiness(self) -> Dict:
+        """Verify if the system is ready for trading"""
+        try:
+            # For mock mode, always ready
+            if self.trading_mode == 'mock':
+                return {
+                    'ready': True,
+                    'mode': 'mock',
+                    'message': 'Mock trading mode - always ready',
+                    'usdt_balance': self.get_trading_balance('USDT')
+                }
+            
+            # For live mode, check Binance readiness
+            logger.info("Verifying live trading readiness...")
+            readiness = self.binance_service.verify_trading_readiness()
+            
+            if readiness['ready']:
+                logger.info("✅ Trading system ready for live trading")
+                return {
+                    'ready': True,
+                    'mode': 'live',
+                    'message': 'Live trading ready',
+                    'account_status': readiness.get('account_status'),
+                    'usdt_balance': readiness.get('usdt_balance'),
+                    'can_trade': readiness.get('can_trade')
+                }
+            else:
+                logger.error(f"❌ Trading system not ready: {readiness.get('error')}")
+                return {
+                    'ready': False,
+                    'mode': 'live',
+                    'error': readiness.get('error'),
+                    'message': 'Live trading not ready'
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to verify trading readiness: {e}")
+            return {
+                'ready': False,
+                'mode': self.trading_mode,
+                'error': str(e),
+                'message': 'Readiness check failed'
+            }
     
     def test_connection(self) -> Dict:
         """Test connection based on trading mode"""
@@ -71,67 +126,82 @@ class TradingManager:
             raise
     
     def get_trading_balance(self, asset: str = 'USDT', mode: str = None) -> Dict:
-        """Get trading balance based on current trading mode or provided mode"""
+        """Get trading balance optimized for immediate trading decisions"""
         try:
             effective_mode = mode if mode else self.trading_mode
+            logger.info(f"Getting trading balance for {asset} in {effective_mode} mode")
+            
             # In mock mode, return virtual balance
             if effective_mode == 'mock':
-                # Initialize mock balance if not exists
                 if asset not in self.mock_balances:
-                    # Set default virtual balance for USDT
                     default_balance = 100000.0 if asset == 'USDT' else 0.0
                     self.mock_balances[asset] = {
                         'free': default_balance, 
                         'locked': 0.0, 
                         'total': default_balance
                     }
-                return {
+                    
+                balance_result = {
                     'asset': asset,
                     'free': self.mock_balances[asset]['free'],
                     'locked': self.mock_balances[asset]['locked'],
                     'total': self.mock_balances[asset]['total'],
                     'wallet_type': 'MOCK',
                     'note': 'Virtual balance for paper trading',
-                    'mode': effective_mode
+                    'mode': effective_mode,
+                    'available_for_trading': self.mock_balances[asset]['free'] > 0,
+                    'success': True
                 }
-            # In live mode, use actual Binance balance from Futures wallet
-            futures_balances = self.binance_service.get_futures_balances()
-            for balance in futures_balances:
-                if balance['asset'] == asset:
-                    return {
-                        'asset': asset,
-                        'free': balance['free'],
-                        'locked': balance['locked'],
-                        'total': balance['total'],
-                        'wallet_type': 'FUTURES',
-                        'note': 'Futures Wallet - Actual Binance balance',
-                        'mode': effective_mode
-                    }
-            # If asset not found in futures, try spot wallet
-            spot_balance = self.binance_service.get_balance(asset)
-            if spot_balance['total'] > 0:
-                return {
+                logger.info(f"Mock trading balance for {asset}: ${balance_result['total']:.2f}")
+                return balance_result
+                
+            # In live mode, use optimized futures balance checking
+            logger.info(f"Fetching live futures balance for {asset}")
+            
+            # Use the new optimized method from binance_service
+            futures_balance = self.binance_service.get_futures_trading_balance(asset)
+            
+            if futures_balance['success']:
+                futures_balance['mode'] = effective_mode
+                futures_balance['note'] = 'Futures Wallet - Optimized for trading'
+                logger.info(f"Found futures balance for {asset}: ${futures_balance['total']:.2f}")
+                return futures_balance
+            
+            # If futures fails, fallback to spot wallet
+            try:
+                spot_balance = self.binance_service.get_balance(asset)
+                balance_result = {
                     'asset': asset,
                     'free': spot_balance['free'],
                     'locked': spot_balance['locked'],
                     'total': spot_balance['total'],
                     'wallet_type': 'SPOT',
-                    'note': 'Spot Wallet - Actual Binance balance',
-                    'mode': effective_mode
+                    'note': 'Spot Wallet - Fallback from futures',
+                    'mode': effective_mode,
+                    'available_for_trading': spot_balance['free'] > 0,
+                    'success': True
                 }
-            # If asset not found anywhere, return zero balance
+                logger.info(f"Using spot balance for {asset}: ${balance_result['total']:.2f}")
+                return balance_result
+            except Exception as e:
+                logger.error(f"Failed to get spot balance for {asset}: {e}")
+            
+            # Return zero balance if all fails
             return {
                 'asset': asset, 
                 'free': 0.0, 
                 'locked': 0.0, 
                 'total': 0.0,
                 'wallet_type': 'FUTURES',
-                'note': 'No balance found - Actual Binance data',
-                'mode': effective_mode
+                'note': 'No balance found',
+                'mode': effective_mode,
+                'available_for_trading': False,
+                'success': True
             }
+            
         except Exception as e:
             logger.error(f"Failed to get trading balance for {asset}: {e}")
-            # Fallback to mock balance if API fails
+            # Emergency fallback to mock balance
             if asset not in self.mock_balances:
                 default_balance = 100000.0 if asset == 'USDT' else 0.0
                 self.mock_balances[asset] = {
@@ -145,8 +215,10 @@ class TradingManager:
                 'locked': self.mock_balances[asset]['locked'],
                 'total': self.mock_balances[asset]['total'],
                 'wallet_type': 'MOCK_FALLBACK',
-                'note': 'API failed - using mock data as fallback',
+                'note': 'API failed - emergency fallback',
                 'mode': effective_mode,
+                'available_for_trading': self.mock_balances[asset]['free'] > 0,
+                'success': False,
                 'error': str(e)
             }
     
@@ -188,17 +260,33 @@ class TradingManager:
             # ALWAYS check real balance regardless of trading mode
             if force_check_real_balance:
                 try:
-                    real_balance = self.binance_service.get_balance('USDT')
+                    # Get trading balance to determine wallet type
+                    trading_balance = self.get_trading_balance('USDT')
+                    wallet_type = trading_balance.get('wallet_type', 'SPOT')
+                    
                     if side.upper() == 'BUY':
                         current_price = self.get_current_price(symbol)
                         required_usdt = quantity * (price if price else current_price)
-                        if real_balance['free'] < required_usdt:
-                            raise Exception(f"Insufficient real USDT balance. Required: {required_usdt}, Available: {real_balance['free']}")
+                        available_usdt = trading_balance.get('free', 0.0)
+                        if available_usdt < required_usdt:
+                            # Check other wallets for sufficient balance
+                            transfer_suggestions = self._get_transfer_suggestions('USDT', required_usdt, wallet_type)
+                            error_data = {
+                                'error_type': 'insufficient_balance',
+                                'required_amount': required_usdt,
+                                'available_amount': available_usdt,
+                                'asset': 'USDT',
+                                'current_wallet': wallet_type,
+                                'transfer_suggestions': transfer_suggestions
+                            }
+                            raise InsufficientBalanceError(f"Insufficient real USDT balance. Required: {required_usdt}, Available: {available_usdt}", error_data)
                     else:  # SELL
                         base_asset = symbol.replace('USDT', '')
-                        real_base_balance = self.binance_service.get_balance(base_asset)
-                        if real_base_balance['free'] < quantity:
-                            raise Exception(f"Insufficient real {base_asset} balance. Required: {quantity}, Available: {real_base_balance['free']}")
+                        # Get trading balance for base asset
+                        base_trading_balance = self.get_trading_balance(base_asset)
+                        available_base = base_trading_balance.get('free', 0.0)
+                        if available_base < quantity:
+                            raise Exception(f"Insufficient real {base_asset} balance. Required: {quantity}, Available: {available_base}")
                 except Exception as e:
                     logger.warning(f"Failed to check real balance, proceeding with {self.trading_mode} mode: {e}")
             
@@ -458,6 +546,18 @@ class TradingManager:
         """Get balances categorized by wallet type (Spot, Futures, etc.)"""
         try:
             if self.trading_mode == 'live':
+                # Check if Binance service has valid credentials
+                if not self.binance_service.api_key or not self.binance_service.api_secret:
+                    logger.warning("Binance API credentials not configured for live mode")
+                    # Return empty structure with warning
+                    return {
+                        'SPOT': {'name': 'Spot Wallet', 'balances': [], 'total_usdt': 0.0},
+                        'FUTURES': {'name': 'Futures Wallet', 'balances': [], 'total_usdt': 0.0},
+                        'MARGIN': {'name': 'Cross Margin', 'balances': [], 'total_usdt': 0.0},
+                        'FUNDING': {'name': 'Funding Wallet', 'balances': [], 'total_usdt': 0.0},
+                        'error': 'API credentials not configured'
+                    }
+                
                 return self.binance_service.get_categorized_balances()
             else:
                 # For mock trading, simulate categorized balances
@@ -544,6 +644,35 @@ class TradingManager:
         except Exception as e:
             logger.error(f"Failed to get {wallet_type} balances: {e}")
             raise
+    
+    def _get_transfer_suggestions(self, asset: str, required_amount: float, current_wallet: str) -> List[Dict]:
+        """Get suggestions for transferring funds from other wallets"""
+        suggestions = []
+        try:
+            # Get categorized balances to check other wallets
+            categorized_balances = self.binance_service.get_categorized_balances()
+            
+            for wallet_type, wallet_data in categorized_balances.items():
+                if wallet_type == current_wallet:
+                    continue
+                    
+                # Find the asset in this wallet
+                for balance in wallet_data.get('balances', []):
+                    if balance['asset'] == asset and float(balance['free']) >= required_amount:
+                        suggestions.append({
+                            'from_wallet': wallet_type,
+                            'to_wallet': current_wallet,
+                            'asset': asset,
+                            'available_amount': float(balance['free']),
+                            'required_amount': required_amount,
+                            'wallet_name': wallet_data['name']
+                        })
+                        break
+            
+            return suggestions
+        except Exception as e:
+            logger.error(f"Failed to get transfer suggestions: {e}")
+            return []
     
     def transfer_between_wallets(self, asset: str, amount: float, from_wallet: str, to_wallet: str) -> Dict:
         """Transfer balance between different wallet types"""

@@ -1,7 +1,13 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
+import { useDispatch } from 'react-redux';
 import apiService from '../services/apiService';
 import tradingService from '../services/tradingService';
 import { toast } from 'react-toastify';
+
+// Redux actions
+import { setBotStatus, setBotEnabled, setActiveTrades, addAnalysisLog, addTradeLog } from '../store/slices/botSlice';
+import { setPaperBalance, setPositions, setRecentTrades, addTrade } from '../store/slices/tradingSlice';
+import { updateCryptoData } from '../store/slices/marketDataSlice';
 
 const WebSocketContext = createContext();
 
@@ -22,6 +28,7 @@ export const useWebSocketContext = () => {
 };
 
 export const WebSocketProvider = ({ children }) => {
+  const dispatch = useDispatch();
   
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -59,12 +66,13 @@ export const WebSocketProvider = ({ children }) => {
   const socketRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
-  const maxReconnectAttempts = 10;
-  const baseReconnectDelay = 20000; // 20 seconds as requested
-  const maxReconnectDelay = 60000; // 60 seconds max
+  const maxReconnectAttempts = 5; // Reduced from 10
+  const baseReconnectDelay = 10000; // Reduced from 20 seconds to 10 seconds
+  const maxReconnectDelay = 30000; // Reduced from 60 seconds
   const isReconnectingRef = useRef(false);
   const messageQueueRef = useRef([]);
   const isManualCloseRef = useRef(false);
+  const botOperationInProgressRef = useRef(false); // NEW: Track bot operations
   
   // 🔧 FIXED: Heartbeat mechanism
   const heartbeatIntervalRef = useRef(null);
@@ -144,7 +152,6 @@ export const WebSocketProvider = ({ children }) => {
         try {
           message = JSON.parse(event.data);
         } catch (e) {
-          console.error('[WebSocketContext] Failed to parse message:', event.data);
           return;
         }
         // Remove debug logging to prevent spam
@@ -159,7 +166,7 @@ export const WebSocketProvider = ({ children }) => {
           
           setLastMessage(message);
           
-          // 🔧 FIXED: Update data state based on message type
+          // 🔧 FIXED: Update data state based on message type + Redux
           if (message.type === 'initial_data' && message.data) {
             setData(prevData => ({
               ...prevData,
@@ -169,6 +176,14 @@ export const WebSocketProvider = ({ children }) => {
               ai_analysis: prevData.ai_analysis || {},
               ai_opportunities: prevData.ai_opportunities || {}
             }));
+            
+            // 🔥 NEW: Update Redux store
+            if (message.data.positions) {
+              dispatch(setPositions(message.data.positions));
+            }
+            if (message.data.paper_balance !== undefined) {
+              dispatch(setPaperBalance(message.data.paper_balance));
+            }
           } else if (message.type === 'crypto_data_response' && message.data) {
             setData(prevData => ({
               ...prevData,
@@ -238,7 +253,14 @@ export const WebSocketProvider = ({ children }) => {
                 ...message.data
               }
             }));
+            
+            // 🔥 NEW: Update Redux store
+            dispatch(setBotStatus(message.data));
+            
           } else if (message.type === 'start_bot_response' && message.data) {
+            // 🔥 NEW: Mark bot operation as in progress
+            botOperationInProgressRef.current = true;
+            
             if (message.data.success) {
               setData(prevData => ({
                 ...prevData,
@@ -247,8 +269,20 @@ export const WebSocketProvider = ({ children }) => {
                   enabled: true
                 }
               }));
+              
+              // 🔥 NEW: Update Redux store
+              dispatch(setBotEnabled(true));
             }
+            
+            // Clear bot operation flag after a short delay
+            setTimeout(() => {
+              botOperationInProgressRef.current = false;
+            }, 5000);
+            
           } else if (message.type === 'stop_bot_response' && message.data) {
+            // 🔥 NEW: Mark bot operation as in progress
+            botOperationInProgressRef.current = true;
+            
             if (message.data.success) {
               setData(prevData => ({
                 ...prevData,
@@ -257,14 +291,22 @@ export const WebSocketProvider = ({ children }) => {
                   enabled: false
                 }
               }));
+              
+              // 🔥 NEW: Update Redux store
+              dispatch(setBotEnabled(false));
             }
+            
+            // Clear bot operation flag after a short delay
+            setTimeout(() => {
+              botOperationInProgressRef.current = false;
+            }, 2000);
           } else if (message.type === 'trading_balance' && message.data) {
-            // Only log important balance updates, not every message
-            console.log('[WebSocketContext] Balance updated for mode:', message.data.mode);
             setData(prevData => ({
               ...prevData,
               trading_balance: message.data.balance,
-              trading_mode: message.data.mode
+              trading_mode: message.data.mode,
+              // Update paper_balance for mock mode compatibility
+              paper_balance: message.data.mode === 'mock' ? message.data.balance.total : prevData.paper_balance
             }));
           } else if (message.type === 'all_trading_balances' && message.data) {
             setData(prevData => ({
@@ -274,7 +316,6 @@ export const WebSocketProvider = ({ children }) => {
             }));
           } else if (message.type === 'order_placed' && message.data) {
             // 🔥 NEW: Handle live order placement response
-            console.log('[WebSocketContext] Live order placed:', message.data);
             if (message.data.success) {
               // Show success message
               if (window.showToast) {
@@ -292,7 +333,6 @@ export const WebSocketProvider = ({ children }) => {
             }
           } else if (message.type === 'trading_mode_updated' && message.data) {
             // 🔥 NEW: Handle trading mode update response
-            console.log('[WebSocketContext] Trading mode updated:', message.data);
             if (window.showToast) {
               window.showToast('info', message.data.message);
             }
@@ -307,7 +347,6 @@ export const WebSocketProvider = ({ children }) => {
             try {
               window.handleAIAnalysisResponse(message);
             } catch (error) {
-              console.error('WebSocket: Error in AI analysis handler:', error);
             }
           }
           
@@ -318,7 +357,6 @@ export const WebSocketProvider = ({ children }) => {
             try {
               window.handleBotResponse(message);
             } catch (error) {
-              console.error('WebSocket: Error in bot handler:', error);
             }
           }
           
@@ -329,13 +367,11 @@ export const WebSocketProvider = ({ children }) => {
             try {
               tradingService.handleMessage(message);
             } catch (error) {
-              console.error('WebSocket: Error in trading handler:', error);
             }
           }
         };
       
       newSocket.onerror = (error) => {
-        console.error('WebSocket: WebSocket error:', error);
         clearTimeout(connectionTimeout);
         setConnectionStatus('error');
         
@@ -389,12 +425,13 @@ export const WebSocketProvider = ({ children }) => {
           timestamp: new Date().toISOString()
         };
         
-        console.log('WebSocket: Connection closed:', closeDetails);
         
         // 🔧 FIXED: Only reconnect if not manually closed and within attempt limits
+        // 🔥 NEW: Be less aggressive during bot operations
         if (!isManualCloseRef.current && 
             reconnectAttemptsRef.current < maxReconnectAttempts && 
-            !isReconnectingRef.current) {
+            !isReconnectingRef.current &&
+            !botOperationInProgressRef.current) {
           
           // Update error message based on close reason
           let errorMessage = 'Backend connection lost';
@@ -464,7 +501,6 @@ export const WebSocketProvider = ({ children }) => {
       };
       
     } catch (error) {
-      console.error('WebSocket: Error creating WebSocket:', error);
       setConnectionStatus('error');
       scheduleReconnect();
     }
@@ -473,7 +509,6 @@ export const WebSocketProvider = ({ children }) => {
   // 🔧 FIXED: Improved reconnection logic with 20-second intervals
   const scheduleReconnect = useCallback(() => {
     if (isReconnectingRef.current) {
-      console.log('WebSocket: Already reconnecting, skipping');
       return;
     }
     
@@ -483,7 +518,6 @@ export const WebSocketProvider = ({ children }) => {
     // 🔥 NEW: Use 20-second intervals as requested
     const delay = baseReconnectDelay; // Always 20 seconds
     
-    console.log(` WebSocketProvider: Scheduling reconnect attempt ${reconnectAttemptsRef.current} in ${delay}ms`);
     setConnectionStatus('reconnecting');
     
     // Update the reconnection toast with countdown
@@ -516,7 +550,6 @@ export const WebSocketProvider = ({ children }) => {
     
     reconnectTimeoutRef.current = setTimeout(() => {
       clearInterval(countdownInterval);
-      console.log(` WebSocketProvider: Reconnection attempt ${reconnectAttemptsRef.current}`);
       connect();
     }, delay);
   }, [connect]);
@@ -545,7 +578,6 @@ export const WebSocketProvider = ({ children }) => {
             missedHeartbeatsRef.current += 1;
           }
         } catch (error) {
-          console.error('WebSocket: Error sending heartbeat:', error);
         }
       }
     }, 30000); // Send heartbeat every 30 seconds
@@ -586,7 +618,6 @@ export const WebSocketProvider = ({ children }) => {
       socketRef.current.send(messageStr);
       return true;
     } catch (error) {
-      console.error('WebSocket: Error sending message:', error);
       // Queue the message for retry
       messageQueueRef.current.push(message);
       return false;
@@ -595,7 +626,6 @@ export const WebSocketProvider = ({ children }) => {
   
   // 🔧 FIXED: Send queued messages when connection is restored
   const sendQueuedMessages = useCallback(() => {
-    console.log(` WebSocketProvider: Sending ${messageQueueRef.current.length} queued messages`);
     
     const queue = [...messageQueueRef.current];
     messageQueueRef.current = [];
@@ -609,7 +639,6 @@ export const WebSocketProvider = ({ children }) => {
           messageQueueRef.current.push(message);
         }
       } catch (error) {
-        console.error('WebSocket: Error sending queued message:', error);
         messageQueueRef.current.push(message);
       }
     });
@@ -765,7 +794,6 @@ export const WebSocketProvider = ({ children }) => {
       if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
         sendMessage({ type: 'get_bot_status' });
       } else {
-        console.warn('WebSocket not connected: cannot get bot status');
       }
     },
     executePaperTrade: async (tradeData) => {
@@ -778,7 +806,14 @@ export const WebSocketProvider = ({ children }) => {
     },
     startBot: async (config = {}) => {
       if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-        sendMessage({ type: 'start_bot', config });
+        // 🔥 NEW: Include current trading mode in bot config
+        const tradingMode = localStorage.getItem('tradingMode') || 'mock';
+        const enhancedConfig = {
+          ...config,
+          trading_mode: tradingMode === 'live' ? 'live' : 'mock'
+        };
+        
+        sendMessage({ type: 'start_bot', config: enhancedConfig });
         return { success: true, message: 'Bot start request sent' };
       } else {
         throw new Error('WebSocket not connected');

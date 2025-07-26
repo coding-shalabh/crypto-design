@@ -4,8 +4,13 @@ Automated trading bot logic and execution
 import asyncio
 import logging
 import time
+import os
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 from config import Config
 from database import DatabaseManager # Import DatabaseManager
@@ -65,25 +70,42 @@ class TradingBot:
         logger.info("Trading Bot initialization complete!")
         
     async def start_bot(self, config: Dict = None) -> Dict:
-        """Start the trading bot"""
+        """Start the trading bot with enhanced readiness verification"""
         try:
-            logger.info("Starting trading bot...")
+            logger.info("🚀 Starting trading bot...")
             
             if self.bot_enabled:
-                logger.warning(" Bot is already running")
+                logger.warning("⚠️ Bot is already running")
                 return {'success': False, 'message': 'Bot is already running'}
             
             # Update config if provided
             if config:
-                logger.info(f" Updating bot config: {config}")
+                logger.info(f"⚙️ Updating bot config: {config}")
                 self.bot_config.update(config)
+            
+            # 🔥 NEW: Verify trading readiness immediately
+            logger.info("🔍 Verifying trading readiness...")
+            readiness = self.trade_execution_manager.trading_manager.verify_trading_readiness()
+            
+            if not readiness['ready']:
+                error_msg = f"Trading system not ready: {readiness.get('error', 'Unknown error')}"
+                logger.error(f"❌ {error_msg}")
+                return {
+                    'success': False, 
+                    'message': error_msg,
+                    'readiness': readiness
+                }
+            
+            logger.info(f"✅ Trading system ready in {readiness['mode']} mode")
+            if readiness.get('usdt_balance'):
+                balance = readiness['usdt_balance']
+                logger.info(f"💰 Available balance: {balance.get('total', 0):.2f} USDT ({balance.get('wallet_type', 'Unknown')} wallet)")
             
             # Reset daily trade counter if it's a new day
             current_time = time.time()
             if current_time - self.bot_last_trade_reset > 86400:  # 24 hours
-                logger.info(" Resetting daily trade counter")
+                logger.info("🔄 Resetting daily trade counter")
                 self.bot_trades_today = 0
-                # 🔥 NEW: Reset mode-specific daily counters
                 self.mock_trades_today = 0
                 self.live_trades_today = 0
                 self.bot_last_trade_reset = current_time
@@ -95,20 +117,21 @@ class TradingBot:
             for pair in self.bot_config['allowed_pairs']:
                 self.bot_pair_status[pair] = 'idle'
             
-            logger.info(f" Trading bot started successfully!")
-            logger.info(f" Allowed pairs: {self.bot_config['allowed_pairs']}")
-            logger.info(f" Trade amount: ${self.bot_config['trade_amount_usdt']}")
-            logger.info(f" Max trades per day: {self.bot_config['max_trades_per_day']}")
-            logger.info(f" AI confidence threshold: {self.bot_config['ai_confidence_threshold']}")
+            logger.info(f"🎯 Trading bot started successfully!")
+            logger.info(f"📊 Allowed pairs: {self.bot_config['allowed_pairs']}")
+            logger.info(f"💵 Trade amount: ${self.bot_config['trade_amount_usdt']}")
+            logger.info(f"📈 Max trades per day: {self.bot_config['max_trades_per_day']}")
+            logger.info(f"🤖 AI confidence threshold: {self.bot_config['ai_confidence_threshold']}")
             
             return {
                 'success': True, 
                 'message': 'Trading bot started successfully',
-                'config': self.bot_config
+                'config': self.bot_config,
+                'readiness': readiness
             }
             
         except Exception as e:
-            logger.error(f" Error starting bot: {e}")
+            logger.error(f"💥 Error starting bot: {e}")
             return {'success': False, 'message': f'Error starting bot: {e}'}
     
     async def stop_bot(self) -> Dict:
@@ -406,8 +429,37 @@ class TradingBot:
             return {'success': False, 'message': f'Error: {str(e)}'}
 
     async def execute_bot_trade(self, symbol: str, analysis: Dict, current_price: float, balance: float, trading_mode: str = 'mock') -> Dict:
-        """Execute a bot trade based on AI analysis"""
+        """Execute a bot trade with enhanced balance verification"""
         try:
+            logger.info(f"🤖 Executing bot trade for {symbol} at ${current_price:.2f}")
+            
+            # 🔥 NEW: Verify trading readiness before executing
+            readiness = self.trade_execution_manager.trading_manager.verify_trading_readiness()
+            if not readiness['ready']:
+                error_msg = f"Trading system not ready: {readiness.get('error', 'Unknown error')}"
+                logger.error(f"❌ {error_msg}")
+                return {
+                    'success': False,
+                    'message': error_msg,
+                    'reason': 'trading_not_ready'
+                }
+            
+            # 🔥 NEW: Get fresh balance for the current mode
+            balance_data = self.trade_execution_manager.trading_manager.get_trading_balance('USDT', trading_mode)
+            if not balance_data.get('success', True):
+                error_msg = f"Failed to get balance: {balance_data.get('error', 'Unknown error')}"
+                logger.error(f"❌ {error_msg}")
+                return {
+                    'success': False,
+                    'message': error_msg,
+                    'reason': 'balance_fetch_failed'
+                }
+            
+            available_balance = balance_data.get('free', 0)
+            wallet_type = balance_data.get('wallet_type', 'UNKNOWN')
+            
+            logger.info(f"💰 Available balance: ${available_balance:.2f} USDT ({wallet_type} wallet)")
+            
             # Handle new GPT final recommendation format
             if analysis.get('source') == 'gpt_final':
                 # New format: GPT final recommendation with 30-minute trade setup
@@ -435,22 +487,31 @@ class TradingBot:
             # Override HOLD if confidence is high enough
             if self._should_override_hold(action, ai_confidence):
                 action = self._get_override_action(ai_confidence)
-                logger.info(f"Overriding HOLD to {action} for {symbol} due to high confidence {ai_confidence:.2f}")
+                logger.info(f"🔄 Overriding HOLD to {action} for {symbol} due to high confidence {ai_confidence:.2f}")
 
             if action == 'HOLD':
-                logger.info(f"Trade execution for {symbol}: HOLD signal received. Not executing trade.")
-                self._log_failed_trade(symbol, 'HOLD signal received', ai_confidence, analysis)
-                return {'success': False, 'message': 'HOLD signal received'}
+                logger.info(f"⏸️ Skipping trade for {symbol} - HOLD signal with confidence {ai_confidence:.2f}")
+                return {
+                    'success': False,
+                    'message': 'HOLD signal - no trade executed',
+                    'reason': 'hold_signal',
+                    'confidence': ai_confidence
+                }
 
-            # Calculate trade amount
-            trade_amount_usdt = self._calculate_trade_amount(balance)
+            # Calculate trade amount using fresh balance
+            trade_amount_usdt = self._calculate_trade_amount(available_balance)
             
             # Check if trade amount is sufficient
-            if trade_amount_usdt <= 0:
-                reason = f"Insufficient balance for trade. Required: ${self.bot_config.get('trade_amount_usdt', 50)}, Available: ${balance:.2f}"
-                logger.warning(f"Trade execution failed for {symbol}: {reason}")
-                self._log_failed_trade(symbol, reason, ai_confidence, analysis)
-                return {'success': False, 'message': reason}
+            if available_balance < trade_amount_usdt:
+                reason = f"Insufficient balance for trade. Required: ${trade_amount_usdt:.2f}, Available: ${available_balance:.2f}"
+                logger.warning(f"⚠️ {reason}")
+                return {
+                    'success': False,
+                    'message': reason,
+                    'reason': 'insufficient_balance',
+                    'required_amount': trade_amount_usdt,
+                    'available_balance': available_balance
+                }
             
             # Check daily trade limit
             if not self._is_within_daily_trade_limit():
@@ -543,19 +604,29 @@ class TradingBot:
             # Calculate safe balance usage (95% of balance as safety)
             safe_balance_amount = balance * 0.95
             
-            # Choose the minimum of all limits to ensure we don't exceed any constraint
-            trade_amount_usdt = min(
-                configured_amount,        # User configured amount
-                max_amount_per_trade,     # Max amount per trade limit
-                max_risk_amount,          # Risk-based limit
-                safe_balance_amount       # Balance safety limit
-            )
+            # Use configured amount as primary, but respect max limits
+            # Don't let risk percentage override configured amount if configured amount is reasonable
+            if configured_amount <= max_amount_per_trade and configured_amount <= safe_balance_amount:
+                trade_amount_usdt = configured_amount
+            else:
+                # Choose the minimum of limits only if configured amount is too high
+                trade_amount_usdt = min(
+                    configured_amount,        # User configured amount
+                    max_amount_per_trade,     # Max amount per trade limit
+                    safe_balance_amount       # Balance safety limit
+                )
             
-            # Ensure minimum trade amount
-            min_trade_amount = 10
+            # Ensure minimum trade amount (configurable with fallback)
+            min_trade_amount = self.bot_config.get('min_trade_amount_usdt', 10)
             if trade_amount_usdt < min_trade_amount:
                 logger.warning(f"Calculated trade amount ${trade_amount_usdt:.2f} is below minimum ${min_trade_amount}")
-                return 0
+                # If balance is sufficient, use minimum amount instead of failing
+                if balance >= min_trade_amount:
+                    logger.info(f"Using minimum trade amount ${min_trade_amount} instead")
+                    trade_amount_usdt = min_trade_amount
+                else:
+                    logger.warning(f"Balance ${balance:.2f} is insufficient even for minimum trade amount ${min_trade_amount}")
+                    return 0
             
             logger.info(f"Trade amount calculated: ${trade_amount_usdt:.2f} "
                        f"(config: ${configured_amount}, max: ${max_amount_per_trade}, "
@@ -762,4 +833,4 @@ class TradingBot:
             logger.info(f"Logged failed trade for {symbol}: {reason} (confidence: {confidence:.2f})")
             
         except Exception as e:
-            logger.error(f"Failed to log failed trade: {e}") 
+            logger.error(f"Failed to log failed trade: {e}")
